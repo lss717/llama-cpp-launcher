@@ -99,7 +99,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.create_small_input(row1, "端口:", self.port)
         self.create_small_input(row1, "NGL:", self.ngl)
         ctk.CTkLabel(row1, text="上下文:").pack(side="left", padx=(20, 2))
-        ctk.CTkOptionMenu(row1, variable=self.ctx_preset, values=["8192", "32768", "65536", "131072", "自定义"],
+        ctk.CTkOptionMenu(row1, variable=self.ctx_preset, values=["8192", "32768", "65536", "131072", "262144", "自定义"],
                          command=lambda c: self.ctx_custom.set(c) if c!="自定义" else None, width=100).pack(side="left", padx=5)
         ctk.CTkEntry(row1, textvariable=self.ctx_custom, width=80).pack(side="left")
 

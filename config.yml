@@ -1,5 +1,5 @@
 cache_type: q8_0
-ctx: '65536'
+ctx: '262144'
 host: 0.0.0.0
 mmproj_path: ''
 model_path: F:/GGUF_models/Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.Q4_K_M.gguf
