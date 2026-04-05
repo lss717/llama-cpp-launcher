@@ -1,0 +1,5 @@
+customtkinter>=5.0.0
+pyyaml>=6.0
+pynvml>=0.31
+psutil>=5.9.0
+py-cpuinfo>=1.0.5
