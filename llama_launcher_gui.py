@@ -121,8 +121,11 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_display = ctk.CTkLabel(row2, text="-> TS: --", text_color="#3498db")
         self.ts_display.pack(side="left", padx=10)
 
+        ctk.CTkLabel(row2,  text="KV量化：").pack(side="left", padx=(15, 2))
         ctk.CTkOptionMenu(row2, variable=self.kv_quant, values=["f16", "q8_0", "q4_0"], width=90).pack(side="left", padx=5)
-        ctk.CTkCheckBox(row2, text="思考模式", variable=self.reasoning).pack(side="left", padx=10)
+
+        ctk.CTkLabel(row2,  text="思考模式：").pack(side="left", padx=(15, 2))
+        ctk.CTkOptionMenu(row2, variable=self.reasoning, values=["on", "off", "auto"], width=90).pack(side="left", padx=10)
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -201,12 +204,9 @@ class LlamaLauncherV6(ctk.CTk):
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
             "--cache-type-k", self.kv_quant.get(),
-            "--cache-type-v", self.kv_quant.get()
+            "--cache-type-v", self.kv_quant.get(),
+            "--reasoning", self.reasoning.get()
         ]
-        
-        # 思考模式参数处理
-        reasoning_val = "on" if self.reasoning.get() else "off"
-        cmd.append(f"--reasoning {reasoning_val}")
 
         if self.mmproj_path.get():
             cmd.extend(["--mmproj", f'"{self.mmproj_path.get()}"'])
@@ -331,7 +331,8 @@ class LlamaLauncherV6(ctk.CTk):
             "-ts", self.ts_final_str.get(), 
             "--flash-attn", "on",
             "--cache-type-k", self.kv_quant.get(), 
-            "--cache-type-v", self.kv_quant.get()
+            "--cache-type-v", self.kv_quant.get(),
+            "--reasoning", self.reasoning.get()
         ]
         if self.mmproj_path.get(): cmd.extend(["--mmproj", f'"{self.mmproj_path.get()}"'])
         
@@ -397,7 +398,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_main_val = ctk.StringVar(value=default_config["ts_ratio"])
         self.kv_quant = ctk.StringVar(value=default_config["cache_type"])
         self.ctx_preset = ctk.StringVar(value="自定义")
-        self.reasoning = ctk.BooleanVar(value=default_config.get("reasoning", False))
+        self.reasoning = ctk.StringVar(value=default_config["reasoning"])
         self.ts_final_str = ctk.StringVar(value="1")
 
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
