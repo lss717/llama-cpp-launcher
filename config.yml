@@ -1,10 +1,24 @@
-cache_type: q8_0
+cache_type: turbo4
 ctx: '262144'
 host: 0.0.0.0
-mmproj_path: F:/GGUF_models/unsloth/gemma-4-E2B-it-GGUF/mmproj-gemma-4-E2B-it-F16.gguf
-model_path: F:/GGUF_models/unsloth/gemma-4-E2B-it-GGUF/gemma-4-E2B-it-UD-Q4_K_XL.gguf
+mmproj_path: ''
+model_path: F:/GGUF_models/unsloth/gemma-4-31B-it-GGUF/gemma-4-31B-it-UD-Q4_K_XL.gguf
 ngl: all
+np_val: '-1'
 port: '8080'
 reasoning: 'off'
-server_path: D:/Program Files/llama/llama-server.exe
-ts_ratio: '28'
+server_path: D:/Program Files/llama/turboquant/llama-server.exe
+ts_ratio: '30'
+cache_type_options:
+- f32
+- f16
+- bf16
+- q8_0
+- q4_0
+- q4_1
+- iq4_nl
+- q5_0
+- q5_1
+- turbo2
+- turbo3
+- turbo4

@@ -122,10 +122,23 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_display.pack(side="left", padx=10)
 
         ctk.CTkLabel(row2,  text="KV量化：").pack(side="left", padx=(15, 2))
-        ctk.CTkOptionMenu(row2, variable=self.kv_quant, values=["f16", "q8_0", "q4_0"], width=90).pack(side="left", padx=5)
+        ctk.CTkOptionMenu(row2, variable=self.kv_quant, values=self.cache_type_options, width=90).pack(side="left", padx=5)
 
         ctk.CTkLabel(row2,  text="思考模式：").pack(side="left", padx=(15, 2))
-        ctk.CTkOptionMenu(row2, variable=self.reasoning, values=["on", "off", "auto"], width=90).pack(side="left", padx=10)
+        ctk.CTkCheckBox(row2, text="开启", variable=self.reasoning, width=90).pack(side="left", padx=10)
+    
+        # 新增优化选项行
+        row3 = ctk.CTkFrame(param_grid, fg_color="transparent")
+        row3.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(row3, text="并发数:").pack(side="left", padx=(5, 2))
+        ctk.CTkEntry(row3, textvariable=self.np_val, width=50).pack(side="left", padx=5)
+
+        ctk.CTkLabel(row3,  text="优化 Flash Attention:").pack(side="left", padx=(5, 2))
+        ctk.CTkCheckBox(row3, text="开启", variable=self.flash_attn, width=90).pack(side="left", padx=10)
+
+        ctk.CTkLabel(row3,  text="性能计时：").pack(side="left", padx=(5, 2))
+        ctk.CTkCheckBox(row3, text="开启", variable=self.perf_timer, width=90).pack(side="left", padx=10)
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -175,7 +188,8 @@ class LlamaLauncherV6(ctk.CTk):
             self.server_path, self.model_path, self.mmproj_path,
             self.host, self.port, self.ngl, self.ctx_custom,
             self.ts_final_str, self.kv_quant, self.reasoning,
-            self.gpu_selection, self.main_gpu_index 
+            self.gpu_selection, self.main_gpu_index ,self.np_val,
+            self.flash_attn, self.perf_timer
         ]
         for var in vars_to_track:
             var.trace_add("write", lambda *args: self.update_cmd_preview())
@@ -203,13 +217,24 @@ class LlamaLauncherV6(ctk.CTk):
             "-mg", mg_idx,
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
+            "-np", self.np_val.get(),
             "--cache-type-k", self.kv_quant.get(),
             "--cache-type-v", self.kv_quant.get(),
-            "--reasoning", self.reasoning.get()
         ]
+        if self.reasoning.get() == "1" or self.reasoning.get() == "on":
+            cmd.extend(["--reasoning", "on"])
+        else:
+            cmd.extend(["--reasoning", "off"])
+
+        if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
+            cmd.append("--flash-attn")
+            cmd.append("on")
+
+        if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
+            cmd.append("--perf")
 
         if self.mmproj_path.get():
-            cmd.extend(["--mmproj", f'"{self.mmproj_path.get()}"'])
+            cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
         
         # 4. 组合最终显示的字符串
         full_display_str = env_prefix + " ".join(cmd)
@@ -321,21 +346,31 @@ class LlamaLauncherV6(ctk.CTk):
 
         # 2. 构建命令
         cmd = [
-            f'"{self.server_path.get()}"', 
-            "--host", self.host.get(), 
-            "--port", self.port.get(), 
-            "-m", f'"{self.model_path.get()}"', 
-            "-ngl", self.ngl.get(), 
+            f'"{self.server_path.get()}"',
+            "--host", self.host.get(),
+            "--port", self.port.get(),
+            "-m", f'"{self.model_path.get()}"',
+            "-ngl", self.ngl.get(),
             "-mg", self.main_gpu_index.get(), # 指定主卡
             "-c", self.ctx_custom.get(),
-            "-ts", self.ts_final_str.get(), 
-            "--flash-attn", "on",
-            "--cache-type-k", self.kv_quant.get(), 
+            "-ts", self.ts_final_str.get(),
+            "-np", self.np_val.get(),
+            "--cache-type-k", self.kv_quant.get(),
             "--cache-type-v", self.kv_quant.get(),
-            "--reasoning", self.reasoning.get()
         ]
-        if self.mmproj_path.get(): cmd.extend(["--mmproj", f'"{self.mmproj_path.get()}"'])
-        
+        if self.reasoning.get() == "1" or self.reasoning.get() == "on":
+            cmd.extend(["--reasoning", "on"])
+        else:
+            cmd.extend(["--reasoning", "off"])
+        if self.mmproj_path.get(): cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
+
+        if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
+            cmd.extend(["--flash-attn", "on"])
+        elif self.flash_attn.get() == "0" or self.flash_attn.get() == "off":
+            cmd.extend(["--flash-attn", "off"])
+        if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
+            cmd.append("--perf")
+
         env = os.environ.copy()
         sel = self.gpu_selection.get()
         env["CUDA_VISIBLE_DEVICES"] = ",".join([str(g['index']) for g in self.available_gpus]) if "所有" in sel else sel.split(":")[0]
@@ -380,9 +415,10 @@ class LlamaLauncherV6(ctk.CTk):
             "ngl": "all",
             "ctx": "32768",
             "ts_ratio": "28",
-            "cache_type": "q8_0"
+            "cache_type": "q8_0",
+            "np_val": "1"
         }
-        
+
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 user_cfg = yaml.safe_load(f)
@@ -397,8 +433,12 @@ class LlamaLauncherV6(ctk.CTk):
         self.ctx_custom = ctk.StringVar(value=default_config["ctx"])
         self.ts_main_val = ctk.StringVar(value=default_config["ts_ratio"])
         self.kv_quant = ctk.StringVar(value=default_config["cache_type"])
+        self.np_val = ctk.StringVar(value=default_config["np_val"])
+        self.flash_attn = ctk.StringVar(value="off")
+        self.perf_timer = ctk.StringVar(value="off")
         self.ctx_preset = ctk.StringVar(value="自定义")
-        self.reasoning = ctk.StringVar(value=default_config["reasoning"])
+        self.reasoning = ctk.StringVar(value="off")
+        self.cache_type_options = default_config.get("cache_type_options", ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"])
         self.ts_final_str = ctk.StringVar(value="1")
 
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
@@ -407,8 +447,14 @@ class LlamaLauncherV6(ctk.CTk):
         self.main_gpu_index = ctk.StringVar(value="0")
 
     def save_config(self):
-        """保存所有当前参数到 YAML"""
-        cfg = {
+        """保存所有当前参数到 YAML，保留原文件中未被覆盖的字段"""
+        cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+
+        # 更新 GUI 管理的字段
+        cfg.update({
             "server_path": self.server_path.get(),
             "model_path": self.model_path.get(),
             "mmproj_path": self.mmproj_path.get(),
@@ -417,11 +463,12 @@ class LlamaLauncherV6(ctk.CTk):
             "ngl": self.ngl.get(),
             "ctx": self.ctx_custom.get(),
             "ts_ratio": self.ts_main_val.get(),
+            "np_val": self.np_val.get(),
             "cache_type": self.kv_quant.get(),
-            "reasoning": self.reasoning.get() # 确保此项被持久化
-        }
+        })
+
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            yaml.dump(cfg, f, allow_unicode=True)
+            yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
 
     def sync_main_gpu(self, choice):
         if "所有显卡" not in choice:
