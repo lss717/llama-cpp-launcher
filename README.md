@@ -25,14 +25,16 @@
 |------|------|
 | `--host` / `--port` | 服务监听地址与端口 |
 | `-m` | 模型文件路径 |
-| `--mmproj` | 多模态模型路径 (可选) |
+| `-mm` | 多模态模型路径 (可选) |
 | `-ngl` | GPU 层数 (支持 `all` 或具体数值) |
 | `-mg` | 主显卡编号 |
 | `-ts` | Tensor Split 分配 |
 | `-c` | 上下文长度 (预设或自定义) |
-| `--cache-type-k/v` | KV 缓存量化类型 (`f16`, `q8_0`, `q4_0`) |
+| `-np` | 并发处理数量 |
+| `--cache-type-k/v` | KV 缓存量化类型 (支持 f16, q8_0, turbo4 等) |
 | `--reasoning` | 思考模式开关 |
-| `--flash-attn` | 强制开启 Flash Attention |
+| `--flash-attn` | Flash Attention 优化开关 |
+| `--perf` | 性能计时输出 |
 
 ### 📝 **配置持久化**
 - 所有设置自动保存至 `config.yml`
