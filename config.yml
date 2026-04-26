@@ -4,11 +4,11 @@ host: 0.0.0.0
 mmproj_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/mmproj-Qwen3.6-27B-BF16.gguf
 model_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf
 ngl: all
-np_val: '1'
+np_val: '-1'
 port: '8080'
 reasoning: 'off'
 server_path: D:/Program Files/llama/turboquant/llama-server.exe
-ts_ratio: '30'
+ts_ratio: '28'
 cache_type_options:
 - f32
 - f16
@@ -23,5 +23,7 @@ cache_type_options:
 - turbo3
 - turbo4
 cache_type_k: turbo4
-cache_type_v: turbo3
+cache_type_v: turbo4
 mmap: '0'
+draft_max: '0'
+draft_model_path: ''

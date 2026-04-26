@@ -89,6 +89,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.create_input(path_frame, "程序路径:", self.server_path, browse=True)
         self.create_input(path_frame, "模型路径:", self.model_path, browse=True)
         self.create_input(path_frame, "多模态路径:", self.mmproj_path, browse=True)
+        self.create_input(path_frame, "投机采样模型:", self.draft_model_path, browse=True)
 
         param_grid = ctk.CTkFrame(self.main_container)
         param_grid.pack(fill="x", pady=10)
@@ -139,8 +140,8 @@ class LlamaLauncherV6(ctk.CTk):
         ctk.CTkLabel(row3, text="并发数:").pack(side="left", padx=(5, 2))
         ctk.CTkEntry(row3, textvariable=self.np_val, width=50).pack(side="left", padx=5)
 
-        ctk.CTkLabel(row3,  text="优化 Flash Attention:").pack(side="left", padx=(5, 2))
-        ctk.CTkCheckBox(row3, text="开启", variable=self.flash_attn, width=90).pack(side="left", padx=10)
+        ctk.CTkLabel(row3,  text="DFlash:").pack(side="left", padx=(5, 2))
+        ctk.CTkEntry(row3, textvariable=self.draft_max, width=50).pack(side="left", padx=5)
 
         ctk.CTkLabel(row3,  text="性能计时：").pack(side="left", padx=(5, 2))
         ctk.CTkCheckBox(row3, text="开启", variable=self.perf_timer, width=90).pack(side="left", padx=10)
@@ -194,7 +195,7 @@ class LlamaLauncherV6(ctk.CTk):
             self.host, self.port, self.ngl, self.ctx_custom,
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index ,self.np_val,
-            self.flash_attn, self.perf_timer, self.mmap
+            self.draft_max, self.draft_model_path, self.perf_timer, self.mmap
         ]
         for var in vars_to_track:
             var.trace_add("write", lambda *args: self.update_cmd_preview())
@@ -223,17 +224,17 @@ class LlamaLauncherV6(ctk.CTk):
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
             "-np", self.np_val.get(),
-            "--cache-type-k", self.kv_quant_k.get(),
-            "--cache-type-v", self.kv_quant_v.get(),
+            "-ctk", self.kv_quant_k.get(),
+            "-ctv", self.kv_quant_v.get(),
         ]
         if self.reasoning.get() == "1" or self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
         else:
             cmd.extend(["--reasoning", "off"])
 
-        if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
-            cmd.append("-fa")
-            cmd.append("on")
+        draft_val = self.draft_max.get().strip()
+        if draft_val and draft_val != "0":
+            cmd.extend(["--draft", draft_val])
 
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
             cmd.append("--perf")
@@ -245,7 +246,8 @@ class LlamaLauncherV6(ctk.CTk):
 
         if self.mmproj_path.get():
             cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
-        
+        if draft_val and draft_val != "0" and self.draft_model_path.get():
+            cmd.extend(["-md", f'"{self.draft_model_path.get()}"'])
         # 4. 组合最终显示的字符串
         full_display_str = env_prefix + " ".join(cmd)
         
@@ -365,8 +367,8 @@ class LlamaLauncherV6(ctk.CTk):
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
             "-np", self.np_val.get(),
-            "--cache-type-k", self.kv_quant_k.get(),
-            "--cache-type-v", self.kv_quant_v.get(),
+            "-ctk", self.kv_quant_k.get(),
+            "-ctv", self.kv_quant_v.get(),
         ]
         if self.reasoning.get() == "1" or self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
@@ -374,10 +376,11 @@ class LlamaLauncherV6(ctk.CTk):
             cmd.extend(["--reasoning", "off"])
         if self.mmproj_path.get(): cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
 
-        if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
-            cmd.extend(["-fa", "on"])
-        elif self.flash_attn.get() == "0" or self.flash_attn.get() == "off":
-            cmd.extend(["-fa", "off"])
+        draft_val = self.draft_max.get().strip()
+        if draft_val and draft_val != "0":
+            cmd.extend(["--draft", draft_val])
+        if draft_val and draft_val != "0" and self.draft_model_path.get():
+            cmd.extend(["-md", f'"{self.draft_model_path.get()}"'])
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
             cmd.append("--perf")
 
@@ -432,7 +435,8 @@ class LlamaLauncherV6(ctk.CTk):
             "ts_ratio": "28",
             "cache_type": "q8_0",
             "np_val": "1",
-            "mmap": "off"
+            "mmap": "off",
+            "draft_max": "0"
         }
 
         if os.path.exists(CONFIG_FILE):
@@ -443,6 +447,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.server_path = ctk.StringVar(value=default_config["server_path"])
         self.model_path = ctk.StringVar(value=default_config["model_path"])
         self.mmproj_path = ctk.StringVar(value=default_config["mmproj_path"])
+        self.draft_model_path = ctk.StringVar(value=default_config.get("draft_model_path", ""))
         self.host = ctk.StringVar(value=default_config["host"])
         self.port = ctk.StringVar(value=default_config["port"])
         self.ngl = ctk.StringVar(value=default_config["ngl"])
@@ -452,7 +457,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.kv_quant_k = ctk.StringVar(value=default_config.get("cache_type_k", cache_type_default))
         self.kv_quant_v = ctk.StringVar(value=default_config.get("cache_type_v", cache_type_default))
         self.np_val = ctk.StringVar(value=default_config["np_val"])
-        self.flash_attn = ctk.StringVar(value="off")
+        self.draft_max = ctk.StringVar(value=default_config.get("draft_max", "16"))
         self.perf_timer = ctk.StringVar(value="off")
         self.mmap = ctk.StringVar(value=default_config.get("mmap", "off"))
         self.ctx_preset = ctk.StringVar(value="自定义")
@@ -486,6 +491,8 @@ class LlamaLauncherV6(ctk.CTk):
             "cache_type_k": self.kv_quant_k.get(),
             "cache_type_v": self.kv_quant_v.get(),
             "mmap": self.mmap.get(),
+            "draft_max": self.draft_max.get(),
+            "draft_model_path": self.draft_model_path.get(),
         })
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
