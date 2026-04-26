@@ -103,6 +103,9 @@ class LlamaLauncherV6(ctk.CTk):
                          command=lambda c: self.ctx_custom.set(c) if c!="自定义" else None, width=100).pack(side="left", padx=5)
         ctk.CTkEntry(row1, textvariable=self.ctx_custom, width=80).pack(side="left")
 
+        ctk.CTkLabel(row1, text="内存映射模型:").pack(side="left", padx=(15, 2))
+        ctk.CTkCheckBox(row1, text="启用", variable=self.mmap, width=60).pack(side="left", padx=5)
+
         row2 = ctk.CTkFrame(param_grid, fg_color="transparent")
         row2.pack(fill="x", padx=10, pady=5)
         ctk.CTkLabel(row2, text="运行设备:").pack(side="left", padx=(5, 2))
@@ -191,7 +194,7 @@ class LlamaLauncherV6(ctk.CTk):
             self.host, self.port, self.ngl, self.ctx_custom,
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index ,self.np_val,
-            self.flash_attn, self.perf_timer
+            self.flash_attn, self.perf_timer, self.mmap
         ]
         for var in vars_to_track:
             var.trace_add("write", lambda *args: self.update_cmd_preview())
@@ -234,6 +237,11 @@ class LlamaLauncherV6(ctk.CTk):
 
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
             cmd.append("--perf")
+
+        if self.mmap.get() == "0" or self.mmap.get() == "off":
+            cmd.append("--no-mmap")
+        else:
+            cmd.append("--mmap")
 
         if self.mmproj_path.get():
             cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
@@ -373,6 +381,11 @@ class LlamaLauncherV6(ctk.CTk):
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
             cmd.append("--perf")
 
+        if self.mmap.get() == "0" or self.mmap.get() == "off":
+            cmd.append("--no-mmap")
+        else:
+            cmd.append("--mmap")
+
         env = os.environ.copy()
         sel = self.gpu_selection.get()
         env["CUDA_VISIBLE_DEVICES"] = ",".join([str(g['index']) for g in self.available_gpus]) if "所有" in sel else sel.split(":")[0]
@@ -418,7 +431,8 @@ class LlamaLauncherV6(ctk.CTk):
             "ctx": "32768",
             "ts_ratio": "28",
             "cache_type": "q8_0",
-            "np_val": "1"
+            "np_val": "1",
+            "mmap": "off"
         }
 
         if os.path.exists(CONFIG_FILE):
@@ -440,6 +454,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.np_val = ctk.StringVar(value=default_config["np_val"])
         self.flash_attn = ctk.StringVar(value="off")
         self.perf_timer = ctk.StringVar(value="off")
+        self.mmap = ctk.StringVar(value=default_config.get("mmap", "off"))
         self.ctx_preset = ctk.StringVar(value="自定义")
         self.reasoning = ctk.StringVar(value="off")
         self.cache_type_options = default_config.get("cache_type_options", ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"])
@@ -470,6 +485,7 @@ class LlamaLauncherV6(ctk.CTk):
             "np_val": self.np_val.get(),
             "cache_type_k": self.kv_quant_k.get(),
             "cache_type_v": self.kv_quant_v.get(),
+            "mmap": self.mmap.get(),
         })
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
