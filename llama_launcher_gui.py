@@ -121,8 +121,10 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_display = ctk.CTkLabel(row2, text="-> TS: --", text_color="#3498db")
         self.ts_display.pack(side="left", padx=10)
 
-        ctk.CTkLabel(row2,  text="KV量化：").pack(side="left", padx=(15, 2))
-        ctk.CTkOptionMenu(row2, variable=self.kv_quant, values=self.cache_type_options, width=90).pack(side="left", padx=5)
+        ctk.CTkLabel(row2, text="K量化：").pack(side="left", padx=(15, 2))
+        ctk.CTkOptionMenu(row2, variable=self.kv_quant_k, values=self.cache_type_options, width=70).pack(side="left", padx=2)
+        ctk.CTkLabel(row2, text="V量化：").pack(side="left", padx=(8, 2))
+        ctk.CTkOptionMenu(row2, variable=self.kv_quant_v, values=self.cache_type_options, width=70).pack(side="left", padx=2)
 
         ctk.CTkLabel(row2,  text="思考模式：").pack(side="left", padx=(15, 2))
         ctk.CTkCheckBox(row2, text="开启", variable=self.reasoning, width=90).pack(side="left", padx=10)
@@ -187,7 +189,7 @@ class LlamaLauncherV6(ctk.CTk):
         vars_to_track = [
             self.server_path, self.model_path, self.mmproj_path,
             self.host, self.port, self.ngl, self.ctx_custom,
-            self.ts_final_str, self.kv_quant, self.reasoning,
+            self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index ,self.np_val,
             self.flash_attn, self.perf_timer
         ]
@@ -218,8 +220,8 @@ class LlamaLauncherV6(ctk.CTk):
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
             "-np", self.np_val.get(),
-            "--cache-type-k", self.kv_quant.get(),
-            "--cache-type-v", self.kv_quant.get(),
+            "--cache-type-k", self.kv_quant_k.get(),
+            "--cache-type-v", self.kv_quant_v.get(),
         ]
         if self.reasoning.get() == "1" or self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
@@ -227,7 +229,7 @@ class LlamaLauncherV6(ctk.CTk):
             cmd.extend(["--reasoning", "off"])
 
         if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
-            cmd.append("--flash-attn")
+            cmd.append("-fa")
             cmd.append("on")
 
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
@@ -355,8 +357,8 @@ class LlamaLauncherV6(ctk.CTk):
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
             "-np", self.np_val.get(),
-            "--cache-type-k", self.kv_quant.get(),
-            "--cache-type-v", self.kv_quant.get(),
+            "--cache-type-k", self.kv_quant_k.get(),
+            "--cache-type-v", self.kv_quant_v.get(),
         ]
         if self.reasoning.get() == "1" or self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
@@ -365,9 +367,9 @@ class LlamaLauncherV6(ctk.CTk):
         if self.mmproj_path.get(): cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
 
         if self.flash_attn.get() == "1" or self.flash_attn.get() == "on":
-            cmd.extend(["--flash-attn", "on"])
+            cmd.extend(["-fa", "on"])
         elif self.flash_attn.get() == "0" or self.flash_attn.get() == "off":
-            cmd.extend(["--flash-attn", "off"])
+            cmd.extend(["-fa", "off"])
         if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
             cmd.append("--perf")
 
@@ -432,7 +434,9 @@ class LlamaLauncherV6(ctk.CTk):
         self.ngl = ctk.StringVar(value=default_config["ngl"])
         self.ctx_custom = ctk.StringVar(value=default_config["ctx"])
         self.ts_main_val = ctk.StringVar(value=default_config["ts_ratio"])
-        self.kv_quant = ctk.StringVar(value=default_config["cache_type"])
+        cache_type_default = default_config.get("cache_type", "q8_0")
+        self.kv_quant_k = ctk.StringVar(value=default_config.get("cache_type_k", cache_type_default))
+        self.kv_quant_v = ctk.StringVar(value=default_config.get("cache_type_v", cache_type_default))
         self.np_val = ctk.StringVar(value=default_config["np_val"])
         self.flash_attn = ctk.StringVar(value="off")
         self.perf_timer = ctk.StringVar(value="off")
@@ -464,7 +468,8 @@ class LlamaLauncherV6(ctk.CTk):
             "ctx": self.ctx_custom.get(),
             "ts_ratio": self.ts_main_val.get(),
             "np_val": self.np_val.get(),
-            "cache_type": self.kv_quant.get(),
+            "cache_type_k": self.kv_quant_k.get(),
+            "cache_type_v": self.kv_quant_v.get(),
         })
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:

@@ -1,8 +1,8 @@
 cache_type: turbo4
 ctx: '262144'
 host: 0.0.0.0
-mmproj_path: ''
-model_path: F:/GGUF_models/unsloth/gemma-4-31B-it-GGUF/gemma-4-31B-it-UD-Q4_K_XL.gguf
+mmproj_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/mmproj-Qwen3.6-27B-BF16.gguf
+model_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf
 ngl: all
 np_val: '-1'
 port: '8080'
@@ -22,3 +22,5 @@ cache_type_options:
 - turbo2
 - turbo3
 - turbo4
+cache_type_k: turbo4
+cache_type_v: turbo3
