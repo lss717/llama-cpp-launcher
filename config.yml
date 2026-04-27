@@ -24,7 +24,7 @@ cache_type_options:
 - turbo4
 cache_type_k: turbo4
 cache_type_v: turbo4
-mmap: '0'
+mmap: 'off'
 draft_max: '0'
 draft_model_path: ''
 model_dir: F:/GGUF_models/unsloth/gemma-4-E4B-it-GGUF
@@ -44,3 +44,4 @@ repeat_penalty: '1.1'
 seed: '-1'
 n_predict: '-1'
 mirostat: '0'
+perf_timer: 'on'
