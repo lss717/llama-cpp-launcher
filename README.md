@@ -1,60 +1,54 @@
-# 🚀 Llama-CPP 启动器 V1.0
+# Llama-CPP Server Launcher
 
-一个功能完备的 llama.cpp server 图形化启动工具，支持实时资源监控、多显卡管理、配置持久化。
+图形化的 llama.cpp server 启动工具，支持多配置管理、投机解码、实时资源监控和全参数可视化配置。
 
-## ✨ 核心功能
+## 功能概览
 
-### 🖥️ **图形化界面管理**
-- **可视化配置**：无需命令行，通过 GUI 界面快速设置所有 llama.cpp 参数
-- **实时命令预览**：界面下方动态显示即将执行的完整命令行，方便核对
+### 多配置 Profile 管理
+- 支持多个预设配置文件（Profile），通过下拉菜单切换
+- 一键新增/保存配置，所有参数持久化到 `config.yml`
+- 启动时自动加载上次使用的 Profile
 
-### 📊 **全方位系统监控**
-- **CPU**：实时显示处理器型号及占用率
-- **内存**：实时显示内存使用情况与总量
-- **GPU**：支持多显卡实时监控
-  - 显卡型号 | GPU利用率 | 显存占用 | 温度 | 功耗
+### 系统实时监控
+- **CPU**：处理器型号 + 实时占用率
+- **内存**：已用 / 总量 / 百分比
+- **GPU**（多卡）：核心利用率 | 显存占用 | 温度 | 功耗
 
-### 🎮 **智能显卡管理**
-- **自动识别**：启动时自动检测系统所有 NVIDIA 显卡
-- **显卡选择**：下拉菜单选择单卡或"所有显卡 (并行)"
-- **主卡权重分配**：多卡模式下自动计算 Tensor Split (`-ts`) 参数
-- **环境变量自动设置**：根据选择自动配置 `CUDA_VISIBLE_DEVICE_S`
+### 智能显卡管理
+- 自动检测 NVIDIA 显卡，支持单卡或多卡并行
+- 自动计算 Tensor Split (`-ts`)，可设置主卡权重配比
+- 自动配置 `CUDA_VISIBLE_DEVICES` 环境变量
 
-### ⚡ **启动参数全覆盖**
-| 参数 | 说明 |
-|------|------|
-| `--host` / `--port` | 服务监听地址与端口 |
-| `-m` | 模型文件路径 |
-| `-mm` | 多模态模型路径 (可选) |
-| `-ngl` | GPU 层数 (支持 `all` 或具体数值) |
-| `-mg` | 主显卡编号 |
-| `-ts` | Tensor Split 分配 |
-| `-c` | 上下文长度 (预设或自定义) |
-| `-np` | 并发处理数量 |
-| `--cache-type-k/v` | KV 缓存量化类型 (支持 f16, q8_0, turbo4 等) |
-| `--reasoning` | 思考模式开关 |
-| `--flash-attn` | Flash Attention 优化开关 |
-| `--perf` | 性能计时输出 |
+### 模型目录浏览
+- **主模型**：设置目录后一键刷新，自动列出所有 GGUF 文件
+- **多模态投影器 (mmproj)**：自动识别 `mmproj-*` 文件
+- **投机草稿模型**：独立目录管理，支持 DFlash 等加速方案
 
-### 📝 **配置持久化**
-- 所有设置自动保存至 `config.yml`
-- 下次启动自动加载上次配置
-- 支持手动编辑配置文件
+### 分 Tab 参数配置
+| Tab | 包含参数 |
+|-----|---------|
+| **API/基础** | 地址、端口、上下文长度（预设+自定义）、思考模式 |
+| **GPU/加速** | 运行设备、主卡编号、GPU层数(-ngl)、拆分模式(-sm)、Flash Attention、TS配比 |
+| **采样/生成** | 温度、top-p、top-k、重复惩罚、随机种子、预测Token数、Mirostat |
+| **高级** | 并发数、投机解码(DFlash)、草稿模型GPU层数、线程数、批处理大小、KV量化类型(K/V独立)、内存映射、性能计时、额外参数 |
 
-### 📋 **运行日志与统计**
-- **实时日志**：彩色高亮显示 (信息、警告、错误、llama.cpp 输出)
-- **Token 统计**：实时解析并显示：
-  - 总生成 Token 数
-  - 生成速率 (tokens/s)
-  - 上下文占用百分比
+### KV 缓存量化支持
+f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1 / turbo2 / turbo3 / turbo4（K/V 独立设置）
 
----
+### 投机解码 (Speculative Decoding)
+- 设置 `--draft` 参数启用草稿 Token 数量
+- 支持配置独立的草稿模型目录和文件选择
+- 可调节草稿模型的 GPU 卸载层数 (`--ngld`)
 
-## 🛠️ 安装与使用
+### 实时日志与统计
+- Token 数量、生成速率 (tokens/s)、上下文占用百分比
+- 彩色高亮：错误(红)、警告(黄)、llama.cpp 输出(蓝)
+
+## 安装使用
 
 ### 环境要求
-- **Python 3.8+**
-- **NVIDIA 显卡** (可选，仅用于 GPU 监控)
+- Python 3.8+
+- NVIDIA 显卡（可选，用于 GPU 监控）
 
 ### 安装依赖
 ```bash
@@ -66,32 +60,55 @@ pip install -r requirements.txt
 python llama_launcher_gui.py
 ```
 
----
+## 配置说明 (`config.yml`)
 
-## ⚙️ 配置示例 (`config.yml`)
+配置文件按 Profile 组织，每个 Profile 包含一组完整参数：
+
 ```yaml
-server_path: "D:\Program Files\llama\llama-server.exe"
-model_path: "D:\models\model.gguf"
-mmproj_path: "D:\models\mmproj.gguf"
-host: "0.0.0.0"
-port: "8080"
-ngl: "all"
-ctx: "32768"
-ts_ratio: "28"
-cache_type: "q8_0"
-reasoning: true
+MyModel:
+  server_path: "D:/Program Files/llama/llama-server.exe"
+  model_dir: "F:/models/my-model"
+  model_name: "model-q4_k_m.gguf"
+  mmproj_name: "(无)"
+  draft_model_dir: ""
+  draft_model_name: "(无)"
+  host: "0.0.0.0"
+  port: "8080"
+  ngl: "all"
+  ctx: "32768"
+  ts_ratio: "28"
+  cache_type_k: "q8_0"
+  cache_type_v: "q8_0"
+  np_val: "-1"
+  mmap: "on"
+  draft_max: "0"
+  perf_timer: "off"
+  flash_attn: "auto"
+  split_mode: "layer"
+  threads: "-1"
+  batch_size: "2048"
+  ubatch_size: "512"
+  temperature: "0.8"
+  top_p: "0.95"
+  top_k: "40"
+  repeat_penalty: "1.0"
+  seed: "-1"
+  n_predict: "-1"
+  mirostat: "0"
+  reasoning: "off"
 ```
 
----
+## 使用流程
 
-## 🛠️ 启动流程
-1. **配置路径**：设置 `llama-server.exe` 和模型文件路径
-2. **选择显卡**：选择运行设备，主卡权重将自动计算
-3. **启动服务**：点击"🚀 启动服务并保存配置"
-4. **实时监控**：查看资源占用与运行日志
-5. **停止服务**：点击"🛑 停止服务"强制结束进程
+1. **选择 Profile**：从顶部下拉菜单选择已有配置，或新建一个
+2. **设置路径**：指定 `llama-server.exe`、模型目录（点击刷新加载模型列表）
+3. **选择设备**：单卡直接选，多卡可设主卡和权重配比
+4. **调整参数**：按 Tab 页按需修改，命令行预览实时更新
+5. **启动/停止**：点击按钮控制服务，日志区实时输出运行状态
 
----
+## llama-server 完整参数参考
 
-## 📄 许可证
+完整的 `llama-server` 命令行参数中文手册请查看 [llama-server-help.md](./llama-server-help.md)，涵盖通用参数、GPU优化、采样参数、服务端设置、投机解码等全部选项。
+
+## License
 MIT License
