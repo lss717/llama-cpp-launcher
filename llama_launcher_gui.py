@@ -1,4 +1,7 @@
 import os
+import sys
+import atexit
+import ctypes
 import subprocess
 import threading
 import time
@@ -6,6 +9,12 @@ import queue
 import yaml
 import platform
 import re
+
+# CRITICAL: Must call freeze_support BEFORE any imports that use multiprocessing (psutil, etc.)
+if getattr(sys, 'frozen', False):
+    import multiprocessing as _mp
+    _mp.freeze_support()  # Prevents child processes from re-running the whole script
+
 import customtkinter as ctk
 from tkinter import filedialog
 import psutil
@@ -15,13 +24,56 @@ try:
     import pynvml
     pynvml.nvmlInit()
     HAS_NVML = True
-except:
+except Exception as e:
+    print(f"[WARN] pynvml 初始化失败: {e}")
     HAS_NVML = False
 
-import sys
+# PyInstaller onefile: sys.executable points to temp _MEI folder, use parent process instead
+_kernel32 = ctypes.windll.kernel32
 
-BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    try:
+        handle = _kernel32.OpenProcess(0x410 | 0x400, False, os.getppid())
+        buf = ctypes.create_unicode_buffer(260)
+        size = ctypes.c_ulong(ctypes.sizeof(buf))
+        if handle and _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+            BASE_DIR = os.path.dirname(buf.value)
+        else:
+            BASE_DIR = os.getcwd()
+        _kernel32.CloseHandle(handle)
+    except Exception as e:
+        print(f"[WARN] 获取父进程路径失败: {e}")
+        BASE_DIR = os.getcwd()
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 CONFIG_FILE = os.path.join(BASE_DIR, "config.yml")
+
+# Single-instance protection via Windows Mutex (using ctypes, no extra dependency)
+_hmutex = None
+try:
+    _kernel32 = ctypes.windll.kernel32
+    mutex_name = "Global\\llama_cpp_launcher_v1"
+    _hmutex = _kernel32.CreateMutexW(None, False, mutex_name)
+    if not _hmutex:
+        raise OSError("CreateMutex failed")
+    last_error = _kernel32.GetLastError()
+    if last_error == 183:  # ERROR_ALREADY_EXISTS
+        print("[!] 程序已在运行中，退出")
+        sys.exit(0)
+except Exception as e:
+    print(f"[WARN] Mutex 创建失败 (非致命): {e}")
+
+
+def _release_mutex():
+    try:
+        if _hmutex is not None:
+            _kernel32.ReleaseMutex(_hmutex)
+    except:
+        pass
+
+atexit.register(_release_mutex)
+
 
 class LlamaLauncherV6(ctk.CTk):
     def __init__(self):
@@ -36,6 +88,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.config_profiles = []
         self.current_profile = ctk.StringVar(value="")
         self.var_map = {}
+
         self.init_vars_and_load_profiles()
 
         self.process = None
@@ -55,6 +108,11 @@ class LlamaLauncherV6(ctk.CTk):
 
         self.start_monitor_thread()
         self.check_log_queue()
+        # Force window visible and on top (PyInstaller console mode workaround)
+        self.deiconify()
+        self.lift()
+        self.attributes('-topmost', True)
+        self.after_idle(self.attributes, '-topmost', False)
 
     def get_system_gpus(self):
         gpus = []
@@ -665,8 +723,10 @@ class LlamaLauncherV6(ctk.CTk):
     def on_profile_selected(self, _=None):
         name = self.current_profile.get()
         if not name or name == "(无)": return
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            all_cfg = yaml.safe_load(f) or {}
+        all_cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                all_cfg = yaml.safe_load(f) or {}
         profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
         if name in profiles:
             self.apply_profile(name, profiles[name])
@@ -674,8 +734,10 @@ class LlamaLauncherV6(ctk.CTk):
     def add_new_profile(self):
         name = self.new_config_name.get().strip()
         if not name: return
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            all_cfg = yaml.safe_load(f) or {}
+        all_cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                all_cfg = yaml.safe_load(f) or {}
         profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
         non_profiles = {k: v for k, v in all_cfg.items() if not isinstance(v, dict)}
         if name not in profiles:
@@ -687,8 +749,10 @@ class LlamaLauncherV6(ctk.CTk):
     def save_config(self):
         profile_name = self.current_profile.get()
         if not profile_name or profile_name == "(无)": return
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            all_cfg = yaml.safe_load(f) or {}
+        all_cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                all_cfg = yaml.safe_load(f) or {}
         profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
         non_profiles = {k: v for k, v in all_cfg.items() if not isinstance(v, dict)}
         profile_data = profiles.get(profile_name, {})
@@ -764,5 +828,10 @@ class LlamaLauncherV6(ctk.CTk):
         if p: var.set(p)
 
 if __name__ == "__main__":
-    app = LlamaLauncherV6()
-    app.mainloop()
+    try:
+        app = LlamaLauncherV6()
+        app.mainloop()
+    except Exception as e:
+        import traceback
+        print(f"\n[ERROR] 程序崩溃！\n{traceback.format_exc()}")
+        input("按回车键关闭控制台...")

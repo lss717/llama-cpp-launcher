@@ -118,15 +118,20 @@ MyModel:
 2. **进入项目目录**：`cd llama-cpp-launcher`
 3. **执行打包命令**：
    ```bash
-   pyinstaller --onefile --windowed --name "llama-cpp-launcher" llama_launcher_gui.py
+   python -m PyInstaller --clean llama-cpp-launcher.spec --noconfirm
    ```
 
-### 参数说明
+### Spec 文件说明 (`llama-cpp-launcher.spec`)
 | 参数 | 作用 |
 |------|------|
-| `--onefile` | 打包为单个 exe，无需额外文件 |
-| `--windowed` | 隐藏控制台窗口（GUI 模式） |
-| `--name` | 指定输出文件名 |
+| `console=False` | 无控制台窗口（GUI模式） |
+| `upx=True` | UPX压缩，减小exe体积 |
+| `runtime_tmpdir=None` | 使用默认临时目录解压资源 |
+
+### 打包注意事项
+- **单实例保护**：程序已内置 Windows Mutex 机制，双击多次只会打开一个窗口
+- **BASE_DIR 处理**：通过 Windows API 获取父进程路径（PyInstaller onefile 模式下 `sys.executable` 指向临时目录）
+- **首次运行**：确保 exe 同级目录下有 `config.yml` 配置文件
 
 ### 依赖清单 (`requirements.txt`)
 | 包名 | 用途 |

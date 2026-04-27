@@ -140,3 +140,49 @@ gemma-4-31B-it:
   - turbo2
   - turbo3
   - turbo4
+gemma-4-E4B-it:
+  server_path: D:/Program Files/llama/turboquant-dFlash/llama-server.exe
+  model_dir: F:/GGUF_models/unsloth/gemma-4-E4B-it-GGUF
+  model_name: gemma-4-E4B-it-UD-Q4_K_XL.gguf
+  mmproj_name: (无)
+  draft_model_dir: F:/GGUF_models/spiritbuun/Qwen3.6-27B-DFlash-GGUF
+  draft_model_name: (无)
+  host: 0.0.0.0
+  port: '8081'
+  ngl: all
+  ctx: '262144'
+  ts_ratio: '28'
+  cache_type_k: turbo4
+  cache_type_v: turbo4
+  np_val: '-1'
+  mmap: 'off'
+  draft_max: '0'
+  perf_timer: 'on'
+  flash_attn: 'on'
+  split_mode: layer
+  threads: '-1'
+  batch_size: '2048'
+  ubatch_size: '512'
+  temperature: '0.8'
+  top_p: '0.95'
+  top_k: '40'
+  repeat_penalty: '1.1'
+  seed: '-1'
+  n_predict: '-1'
+  mirostat: '0'
+  reasoning: 'off'
+  ngld: auto
+  extra_args: ''
+  cache_type_options:
+  - f32
+  - f16
+  - bf16
+  - q8_0
+  - q4_0
+  - q4_1
+  - iq4_nl
+  - q5_0
+  - q5_1
+  - turbo2
+  - turbo3
+  - turbo4
