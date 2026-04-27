@@ -55,7 +55,7 @@ f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1 / turbo2 / turbo3 /
 pip install -r requirements.txt
 ```
 
-### 运行
+### 运行源码模式
 ```bash
 python llama_launcher_gui.py
 ```
@@ -106,9 +106,39 @@ MyModel:
 4. **调整参数**：按 Tab 页按需修改，命令行预览实时更新
 5. **启动/停止**：点击按钮控制服务，日志区实时输出运行状态
 
-## llama-server 完整参数参考
+## 打包为 EXE
 
-完整的 `llama-server` 命令行参数中文手册请查看 [llama-server-help.md](./llama-server-help.md)，涵盖通用参数、GPU优化、采样参数、服务端设置、投机解码等全部选项。
+将项目打包为独立可执行文件，无需 Python 环境即可运行。`config.yml` **不嵌入** exe，而是放在 exe 同级目录下外部读取和编辑。
 
-## License
-MIT License
+### 构建步骤
+1. **安装所有依赖（含 PyInstaller）**：
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **进入项目目录**：`cd llama-cpp-launcher`
+3. **执行打包命令**：
+   ```bash
+   pyinstaller --onefile --windowed --name "llama-cpp-launcher" llama_launcher_gui.py
+   ```
+
+### 参数说明
+| 参数 | 作用 |
+|------|------|
+| `--onefile` | 打包为单个 exe，无需额外文件 |
+| `--windowed` | 隐藏控制台窗口（GUI 模式） |
+| `--name` | 指定输出文件名 |
+
+### 依赖清单 (`requirements.txt`)
+| 包名 | 用途 |
+|------|------|
+| `customtkinter>=5.0.0` | 现代化 GUI 框架 |
+| `pyyaml>=6.0` | YAML 配置读写 |
+| `pynvml>=0.31` | NVIDIA GPU 监控 |
+| `psutil>=5.9.0` | CPU/内存监控系统资源 |
+| `py-cpuinfo>=1.0.5` | 获取处理器型号信息 |
+| **打包依赖** ||
+| `PyInstaller>=6.0.0` | Python → EXE 打包工具 |
+
+### 运行打包后的 exe
+- `llama-cpp-launcher.exe` 启动后自动在 **exe 同级目录** 下读取和写入 `config.yml`
+- 首次运行时无配置文件，手动设置参数后点击保存即可生成

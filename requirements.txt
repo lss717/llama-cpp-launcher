@@ -3,3 +3,5 @@ pyyaml>=6.0
 pynvml>=0.31
 psutil>=5.9.0
 py-cpuinfo>=1.0.5
+# 打包工具（构建时安装）
+PyInstaller>=6.0.0
