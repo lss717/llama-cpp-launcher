@@ -9,7 +9,7 @@ import re
 import customtkinter as ctk
 from tkinter import filedialog
 import psutil
-import cpuinfo 
+import cpuinfo
 
 try:
     import pynvml
@@ -26,27 +26,30 @@ class LlamaLauncherV6(ctk.CTk):
         self.title("Llama-CPP 启动器 V1.0")
         self.geometry("1300x900")
         ctk.set_appearance_mode("dark")
-        
+
         self.available_gpus = self.get_system_gpus()
-        
-        # 核心修复：先初始化变量（load_config），再创建 UI
-        self.load_config() 
-        
+
+        # 加载配置文件中的 profile 列表，初始化所有变量
+        self.config_profiles = []
+        self.current_profile = ctk.StringVar(value="")
+        self.var_map = {}
+        self.init_vars_and_load_profiles()
+
         self.process = None
         self.running = False
         self.log_queue = queue.Queue()
-        
+
         # Token 统计变量
         self.total_tokens = 0
         self.tokens_per_sec = "0.00"
 
         # 变量就绪后，再初始化 UI
         self.setup_ui()
-        
+
         # 绑定追踪逻辑（在变量和 UI 都存在后执行）
         self.bind_preview_updates()
         self.update_cmd_preview()
-        
+
         self.start_monitor_thread()
         self.check_log_queue()
 
@@ -65,6 +68,21 @@ class LlamaLauncherV6(ctk.CTk):
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
 
+        # 配置选择栏 (左上角)
+        cfg_bar = ctk.CTkFrame(self.main_container, height=35, fg_color="#1a1a1a")
+        cfg_bar.pack(fill="x", pady=(0, 8))
+        cfg_bar.pack_propagate(False)
+
+        ctk.CTkLabel(cfg_bar, text="配置:", width=50, anchor="w").pack(side="left", padx=(5, 2))
+
+        profile_values = self.config_profiles if self.config_profiles else ["(无)"]
+        self.profile_dropdown = ctk.CTkOptionMenu(cfg_bar, variable=self.current_profile, values=profile_values, width=180, command=self.on_profile_selected)
+        self.profile_dropdown.pack(side="left", padx=(0, 5))
+
+        ctk.CTkEntry(cfg_bar, textvariable=self.new_config_name, placeholder_text="新配置名称").pack(side="left", fill="x", expand=True, padx=2)
+        ctk.CTkButton(cfg_bar, text="+新增", width=45, command=self.add_new_profile).pack(side="right", padx=(0, 2))
+        ctk.CTkButton(cfg_bar, text="保存", width=45, command=self.save_config).pack(side="right")
+
         # --- 需求 3: 将监控部分放在程序路径上面 ---
         self.monitor_frame = ctk.CTkFrame(self.main_container, height=120, fg_color="#1a1a1a")
         self.monitor_frame.pack(fill="x", pady=(0, 15))
@@ -73,7 +91,7 @@ class LlamaLauncherV6(ctk.CTk):
         # 监控项渲染 (使用 Grid 布局)
         self.mon_labels["CPU"] = ctk.CTkLabel(self.monitor_frame, text="CPU: 识别中...", anchor="w")
         self.mon_labels["CPU"].grid(row=0, column=0, padx=20, pady=5, sticky="w")
-        
+
         self.mon_labels["RAM"] = ctk.CTkLabel(self.monitor_frame, text="内存: 加载中...", anchor="w")
         self.mon_labels["RAM"].grid(row=0, column=1, padx=20, pady=5, sticky="w")
 
@@ -158,32 +176,39 @@ class LlamaLauncherV6(ctk.CTk):
         row_adv.pack(fill="x", padx=10, pady=5)
         self.create_small_input(row_adv, "并发数:", self.np_val)
         self.create_small_input(row_adv, "DFlash:", self.draft_max)
+        self.create_small_input(row_adv, "卸载层数:", self.ngld, width=70)
         self.create_small_input(row_adv, "线程数:", self.threads)
         self.create_small_input(row_adv, "Prompt大小:", self.batch_size)
         self.create_small_input(row_adv, "UBatch大小:", self.ubatch_size)
         self.create_small_option(row_adv, "K量化：", self.kv_quant_k, self.cache_type_options)
         self.create_small_option(row_adv, "V量化：", self.kv_quant_v, self.cache_type_options)
-        self.create_small_check(row_adv, "内存映射模型:", self.mmap)
 
         row_adv2 = ctk.CTkFrame(tab_adv, fg_color="transparent")
         row_adv2.pack(fill="x", padx=10, pady=5)
+        self.create_small_check(row_adv2, "内存映射模型:", self.mmap)
         self.create_small_check(row_adv2, "性能计时：", self.perf_timer, text="开启")
+
+        # 额外参数输入框（独占一行，填满宽度）
+        f = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        f.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f, text="额外参数:", width=90, anchor="w").pack(side="left")
+        ctk.CTkEntry(f, textvariable=self.extra_args).pack(side="left", fill="x", expand=True, padx=(5, 5))
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
         log_box.pack(fill="both", expand=True, pady=10)
-        
+
         # 命令预览
         ctk.CTkLabel(log_box, text="[ 命令行预览 ]", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         self.cmd_display = ctk.CTkTextbox(
-                log_box, 
+                log_box,
                 font=("Consolas", 10),  # 稍微缩小预览字体，更显精炼
                 text_color="#3498db",
                 height=70,              # 固定高度，防止它无限拉伸
                 activate_scrollbars=False # 预览较短时可关闭滚动条，视觉更统一
             )
         # 缩小上方间距
-        self.cmd_display.pack(fill="x", pady=(2, 8)) 
+        self.cmd_display.pack(fill="x", pady=(2, 8))
         # 初始设为只读
         self.cmd_display.configure(state="disabled")
 
@@ -191,7 +216,7 @@ class LlamaLauncherV6(ctk.CTk):
         ctk.CTkLabel(log_box, text="[ 实时运行日志 ]", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         self.log_display = ctk.CTkTextbox(log_box, font=("Consolas", 11), fg_color="#0d0d0d")
         self.log_display.pack(fill="both", expand=True, pady=5)
-        
+
         # 配置日志颜色标签
         self.log_display.tag_config("info", foreground="#2ecc71")
         self.log_display.tag_config("warn", foreground="#f1c40f")
@@ -201,7 +226,7 @@ class LlamaLauncherV6(ctk.CTk):
         # 4. 按钮
         btn_row = ctk.CTkFrame(self.main_container, fg_color="transparent")
         btn_row.pack(fill="x", pady=5)
-        self.start_btn = ctk.CTkButton(btn_row, text="🚀 启动服务并保存配置", fg_color="#2ecc71", command=self.start_server, height=40)
+        self.start_btn = ctk.CTkButton(btn_row, text="🚀 启动服务", fg_color="#2ecc71", command=self.start_server, height=40)
         self.start_btn.pack(side="left", expand=True, padx=5)
         self.stop_btn = ctk.CTkButton(btn_row, text="🛑 停止服务", fg_color="#e74c3c", command=self.stop_server, state="disabled", height=40)
         self.stop_btn.pack(side="left", expand=True, padx=5)
@@ -210,7 +235,7 @@ class LlamaLauncherV6(ctk.CTk):
         for var in [self.gpu_selection, self.main_gpu_index, self.ts_main_val]:
             var.trace_add("write", lambda *args: self.auto_calc_ts())
         self.sync_main_gpu(self.gpu_selection.get())
-    
+
     def bind_preview_updates(self):
         """为所有影响命令的变量绑定更新函数"""
         vars_to_track = [
@@ -220,17 +245,15 @@ class LlamaLauncherV6(ctk.CTk):
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index ,self.np_val,
           self.draft_max, self.perf_timer, self.mmap, self.flash_attn, self.split_mode,
-           self.threads, self.batch_size, self.ubatch_size,
-            self.temperature, self.top_p, self.top_k, self.repeat_penalty,
-            self.seed, self.n_predict, self.mirostat
+            self.threads, self.batch_size, self.ubatch_size, self.ngld,
+             self.temperature, self.top_p, self.top_k, self.repeat_penalty,
+             self.seed, self.n_predict, self.mirostat, self.extra_args
         ]
         for var in vars_to_track:
             var.trace_add("write", lambda *args: self.update_cmd_preview())
         self.draft_max.trace_add("write", self.on_draft_max_changed)
 
     def on_draft_max_changed(self, *_):
-        if self.draft_max.get().strip() != "0":
-            self.mmproj_name.set("(无)")
         self.update_draft_visibility()
 
     def update_draft_visibility(self):
@@ -249,17 +272,17 @@ class LlamaLauncherV6(ctk.CTk):
         all_files = sorted(os.listdir(d))
         model_files = [f for f in all_files if not f.startswith("mmproj") and not f.startswith(".")]
         mmproj_files = [f for f in all_files if f.startswith("mmproj")]
-        
+
         current_model = self.model_name.get()
         current_mmproj = self.mmproj_name.get()
-        
+
         model_opts = model_files if model_files else ["(无)"]
         self.model_dropdown.configure(values=model_opts)
         if current_model not in model_opts and model_files:
             self.model_name.set(model_files[0])
         elif current_model in model_opts:
             self.model_name.set(current_model)
-            
+
         mmproj_opts = ["(无)"] + mmproj_files
         self.mmproj_dropdown.configure(values=mmproj_opts)
         if current_mmproj not in mmproj_opts and mmproj_files:
@@ -273,7 +296,7 @@ class LlamaLauncherV6(ctk.CTk):
             return
         all_files = sorted(os.listdir(d))
         model_files = [f for f in all_files if not f.startswith("mmproj") and not f.startswith(".")]
-        
+
         current_draft = self.draft_model_name.get()
         model_opts = model_files if model_files else ["(无)"]
         self.draft_model_dropdown.configure(values=model_opts)
@@ -288,14 +311,14 @@ class LlamaLauncherV6(ctk.CTk):
         if d and n and n != "(无)":
             return os.path.join(d, n)
         return ""
-    
+
     def get_full_mmproj_path(self):
         d = self.model_dir.get().strip()
         n = self.mmproj_name.get().strip()
         if d and n and n != "(无)":
             return os.path.join(d, n)
         return ""
-    
+
     def get_full_draft_path(self):
         d = self.draft_model_dir.get().strip()
         n = self.draft_model_name.get().strip()
@@ -379,6 +402,17 @@ class LlamaLauncherV6(ctk.CTk):
         if draft_val and draft_val != "0" and draft_full:
             cmd.extend(["-md", quote(draft_full)])
 
+        # ngld参数，当DFlash不为0时生效（auto/0/1/2/4等）
+        if draft_val and draft_val != "0":
+            ngld_val = self.ngld.get().strip()
+            cmd.extend(["--ngld", ngld_val])
+
+        # 额外参数，按空格分割追加到命令末尾（不添加引号）
+        extra = self.extra_args.get().strip()
+        if extra:
+            for arg in re.split(r'\s+', extra):
+                cmd.append(arg)
+
         # 3. 返回完整命令字符串（含环境变量）或纯命令列表
         if for_display:
             return env_prefix + " ".join(cmd)
@@ -408,7 +442,7 @@ class LlamaLauncherV6(ctk.CTk):
                     self.mon_labels["CPU"].configure(
                         text=f"处理器: {cpu_name} | 占用: {cpu_usage}%"
                     )
-                    
+
                     # 内存监控
                     ram = psutil.virtual_memory()
                     self.mon_labels["RAM"].configure(
@@ -420,12 +454,12 @@ class LlamaLauncherV6(ctk.CTk):
                         for i, gpu_info in enumerate(self.available_gpus):
                             h = pynvml.nvmlDeviceGetHandleByIndex(i)
                             name = gpu_info['name'] # 获取初始化时记录的显卡名称
-                            
+
                             info = pynvml.nvmlDeviceGetMemoryInfo(h)
                             util = pynvml.nvmlDeviceGetUtilizationRates(h)
                             temp = pynvml.nvmlDeviceGetTemperature(h, 0)
                             pwr = pynvml.nvmlDeviceGetPowerUsage(h) / 1000.0
-                            
+
                             # 格式化显示：[GPU索引] 型号 | 负载 | 显存 | 温度 | 功耗
                             display_text = (
                                 f"GPU{i} [{name}]: 核心 {util.gpu}% | "
@@ -435,7 +469,7 @@ class LlamaLauncherV6(ctk.CTk):
                             self.mon_labels[f"GPU{i}"].configure(text=display_text)
                 except Exception as e:
                     print(f"监控线程异常: {e}")
-                
+
                 time.sleep(1)
 
         threading.Thread(target=monitor, daemon=True).start()
@@ -443,7 +477,7 @@ class LlamaLauncherV6(ctk.CTk):
     def highlight_logs(self, text):
         """解析 Token 并高亮日志"""
         self.log_display.insert("end", text)
-        
+
         # 需求 4: 解析 llama.cpp 的 Token 输出
         # 典型输出: print_statistics: ... tokens, 5.23 t/s
         if "tokens" in text and "t/s" in text:
@@ -452,12 +486,12 @@ class LlamaLauncherV6(ctk.CTk):
                 s_match = re.search(r"([\d\.]+) t/s", text)
                 if t_match: self.total_tokens += int(t_match.group(1))
                 if s_match: self.tokens_per_sec = s_match.group(1)
-                
+
                 # 计算上下文占比
                 ctx_limit = int(self.ctx_custom.get()) if self.ctx_custom.get().isdigit() else 32768
                 percent = min(100, int((self.total_tokens / ctx_limit) * 100))
-                
-                self.token_info.configure(text=f"Tokens: {self.total_tokens} | 速度: {self.tokens_per_sec} t/s | 占比: {percent}%")
+
+                print(f"[Token] Tokens: {self.total_tokens} | 速度: {self.tokens_per_sec} t/s | 占比: {percent}%")
             except: pass
 
         # 高亮逻辑
@@ -475,7 +509,6 @@ class LlamaLauncherV6(ctk.CTk):
     def start_server(self):
         if self.running: return
         self.total_tokens = 0 # 重置计数
-        self.save_config()
         self.log_display.delete("1.0", "end")
 
         # 1. 准备环境变量
@@ -512,10 +545,10 @@ class LlamaLauncherV6(ctk.CTk):
                         pass
             except Exception as e:
                 print(f"终止进程异常: {e}")
-        
+
             stop_msg = "\n" + "="*20 + " 服务停止成功 " + "="*20 + "\n"
             self.log_queue.put(stop_msg)
-        
+
         self.running = False
         self.start_btn.configure(state="enabled")
         self.stop_btn.configure(state="disabled")
@@ -526,64 +559,51 @@ class LlamaLauncherV6(ctk.CTk):
             self.log_display.see("end")
         self.after(100, self.check_log_queue)
 
-    def load_config(self):
-        default_config = {
+    def init_vars_and_load_profiles(self):
+        self.defaults = {
             "server_path": r"D:\Program Files\llama\llama-server.exe",
-            "model_dir": "",
-            "model_name": "",
-           "mmproj_name": "",
-            "draft_model_dir": "",
-            "draft_model_name": "",
-            "host": "0.0.0.0",
-            "port": "8080",
-            "ngl": "all",
-            "ctx": "32768",
-            "ts_ratio": "28",
-            "cache_type": "q8_0",
-            "np_val": "1",
-            "mmap": "off",
-            "perf_timer": "off",
-            "draft_max": "0"
+            "model_dir": "", "model_name": "", "mmproj_name": "",
+            "draft_model_dir": "", "draft_model_name": "",
+            "host": "0.0.0.0", "port": "8080",
+            "ngl": "all", "ctx": "32768", "ts_ratio": "28",
+            "cache_type": "q8_0", "np_val": "1",
+            "mmap": "off", "perf_timer": "off", "draft_max": "0"
         }
 
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                user_cfg = yaml.safe_load(f)
-                if user_cfg: default_config.update(user_cfg)
-        
-        self.server_path = ctk.StringVar(value=default_config["server_path"])
-        self.model_dir = ctk.StringVar(value=default_config.get("model_dir", ""))
-        self.model_name = ctk.StringVar(value=default_config.get("model_name", ""))
-        self.mmproj_name = ctk.StringVar(value=default_config.get("mmproj_name", ""))
-        self.draft_model_dir = ctk.StringVar(value=default_config.get("draft_model_dir", ""))
-        self.draft_model_name = ctk.StringVar(value=default_config.get("draft_model_name", ""))
-        self.host = ctk.StringVar(value=default_config["host"])
-        self.port = ctk.StringVar(value=default_config["port"])
-        self.ngl = ctk.StringVar(value=default_config["ngl"])
-        self.ctx_custom = ctk.StringVar(value=default_config["ctx"])
-        self.ts_main_val = ctk.StringVar(value=default_config["ts_ratio"])
-        cache_type_default = default_config.get("cache_type", "q8_0")
-        self.kv_quant_k = ctk.StringVar(value=default_config.get("cache_type_k", cache_type_default))
-        self.kv_quant_v = ctk.StringVar(value=default_config.get("cache_type_v", cache_type_default))
-        self.np_val = ctk.StringVar(value=default_config["np_val"])
-        self.flash_attn = ctk.StringVar(value=default_config.get("flash_attn", "auto"))
-        self.split_mode = ctk.StringVar(value=default_config.get("split_mode", "layer"))
-        self.draft_max = ctk.StringVar(value=default_config.get("draft_max", "16"))
-        self.perf_timer = ctk.StringVar(value="on" if default_config.get("perf_timer", "") in ("on", "1") else "off")
-        self.mmap = ctk.StringVar(value="on" if default_config.get("mmap", "") in ("on", "1") else "off")
-        self.threads = ctk.StringVar(value=default_config.get("threads", "-1"))
-        self.batch_size = ctk.StringVar(value=default_config.get("batch_size", "2048"))
-        self.ubatch_size = ctk.StringVar(value=default_config.get("ubatch_size", "512"))
-        self.temperature = ctk.StringVar(value=default_config.get("temperature", "0.8"))
-        self.top_p = ctk.StringVar(value=default_config.get("top_p", "0.95"))
-        self.top_k = ctk.StringVar(value=default_config.get("top_k", "40"))
-        self.repeat_penalty = ctk.StringVar(value=default_config.get("repeat_penalty", "1.0"))
-        self.seed = ctk.StringVar(value=default_config.get("seed", "-1"))
-        self.n_predict = ctk.StringVar(value=default_config.get("n_predict", "-1"))
-        self.mirostat = ctk.StringVar(value=default_config.get("mirostat", "0"))
+        self.server_path = ctk.StringVar(value=self.defaults["server_path"])
+        self.model_dir = ctk.StringVar()
+        self.model_name = ctk.StringVar()
+        self.mmproj_name = ctk.StringVar()
+        self.draft_model_dir = ctk.StringVar()
+        self.draft_model_name = ctk.StringVar()
+        self.host = ctk.StringVar(value=self.defaults["host"])
+        self.port = ctk.StringVar(value=self.defaults["port"])
+        self.ngl = ctk.StringVar(value=self.defaults["ngl"])
+        self.ctx_custom = ctk.StringVar(value=self.defaults["ctx"])
+        self.ts_main_val = ctk.StringVar(value=self.defaults["ts_ratio"])
+        self.kv_quant_k = ctk.StringVar(value=self.defaults["cache_type"])
+        self.kv_quant_v = ctk.StringVar(value=self.defaults["cache_type"])
+        self.np_val = ctk.StringVar(value=self.defaults["np_val"])
+        self.flash_attn = ctk.StringVar(value="auto")
+        self.split_mode = ctk.StringVar(value="layer")
+        self.draft_max = ctk.StringVar(value="0")
+        self.perf_timer = ctk.StringVar(value="off")
+        self.mmap = ctk.StringVar(value="on")
+        self.threads = ctk.StringVar(value="-1")
+        self.batch_size = ctk.StringVar(value="2048")
+        self.ubatch_size = ctk.StringVar(value="512")
+        self.temperature = ctk.StringVar(value="0.8")
+        self.top_p = ctk.StringVar(value="0.95")
+        self.top_k = ctk.StringVar(value="40")
+        self.repeat_penalty = ctk.StringVar(value="1.0")
+        self.seed = ctk.StringVar(value="-1")
+        self.n_predict = ctk.StringVar(value="-1")
+        self.mirostat = ctk.StringVar(value="0")
         self.ctx_preset = ctk.StringVar(value="自定义")
-        self.reasoning = ctk.StringVar(value="on" if default_config.get("reasoning", "") in ("on", "1") else "off")
-        self.cache_type_options = default_config.get("cache_type_options", ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"])
+        self.reasoning = ctk.StringVar(value="off")
+        self.cache_type_options = ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"]
+        self.ngld = ctk.StringVar(value="auto")
+        self.extra_args = ctk.StringVar()
         self.ts_final_str = ctk.StringVar(value="1")
 
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
@@ -591,48 +611,92 @@ class LlamaLauncherV6(ctk.CTk):
         self.gpu_selection = ctk.StringVar(value=gpu_opts[-1])
         self.main_gpu_index = ctk.StringVar(value="0")
 
-    def save_config(self):
-        """保存所有当前参数到 YAML，保留原文件中未被覆盖的字段"""
-        cfg = {}
+        self.var_map = {
+            "server_path": self.server_path, "model_dir": self.model_dir,
+            "model_name": self.model_name, "mmproj_name": self.mmproj_name,
+            "draft_model_dir": self.draft_model_dir, "draft_model_name": self.draft_model_name,
+            "host": self.host, "port": self.port, "ngl": self.ngl,
+            "ctx": self.ctx_custom, "ts_ratio": self.ts_main_val,
+            "cache_type_k": self.kv_quant_k, "cache_type_v": self.kv_quant_v,
+            "np_val": self.np_val, "mmap": self.mmap, "draft_max": self.draft_max,
+            "perf_timer": self.perf_timer, "flash_attn": self.flash_attn,
+            "split_mode": self.split_mode, "threads": self.threads,
+            "batch_size": self.batch_size, "ubatch_size": self.ubatch_size,
+            "temperature": self.temperature, "top_p": self.top_p,
+            "top_k": self.top_k, "repeat_penalty": self.repeat_penalty,
+            "seed": self.seed, "n_predict": self.n_predict,
+            "mirostat": self.mirostat, "reasoning": self.reasoning,
+            "ngld": self.ngld, "extra_args": self.extra_args,
+        }
+
+        self.new_config_name = ctk.StringVar()
+        self._load_profiles_from_file()
+
+    def _load_profiles_from_file(self):
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f) or {}
+                all_cfg = yaml.safe_load(f) or {}
+            profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
+            self.config_profiles = list(profiles.keys())
+            if self.config_profiles:
+                self.current_profile.set(self.config_profiles[0])
+                self.apply_profile(self.config_profiles[0], profiles[self.config_profiles[0]])
 
-        # 更新 GUI 管理的字段
-        cfg.update({
-            "server_path": self.server_path.get(),
-            "model_dir": self.model_dir.get(),
-            "model_name": self.model_name.get(),
-            "mmproj_name": self.mmproj_name.get(),
-            "draft_model_dir": self.draft_model_dir.get(),
-            "draft_model_name": self.draft_model_name.get(),
-            "host": self.host.get(),
-            "port": self.port.get(),
-            "ngl": self.ngl.get(),
-            "ctx": self.ctx_custom.get(),
-            "ts_ratio": self.ts_main_val.get(),
-            "np_val": self.np_val.get(),
-            "cache_type_k": self.kv_quant_k.get(),
-            "cache_type_v": self.kv_quant_v.get(),
-            "mmap": self.mmap.get(),
-            "draft_max": self.draft_max.get(),
-            "perf_timer": self.perf_timer.get(),
-            "flash_attn": self.flash_attn.get(),
-            "split_mode": self.split_mode.get(),
-            "threads": self.threads.get(),
-            "batch_size": self.batch_size.get(),
-            "ubatch_size": self.ubatch_size.get(),
-            "temperature": self.temperature.get(),
-            "top_p": self.top_p.get(),
-            "top_k": self.top_k.get(),
-            "repeat_penalty": self.repeat_penalty.get(),
-            "seed": self.seed.get(),
-            "n_predict": self.n_predict.get(),
-            "mirostat": self.mirostat.get(),
-        })
+    def apply_profile(self, name, cfg):
+        for key, var in self.var_map.items():
+            val = cfg.get(key)
+            if val is not None:
+                str_val = str(val) if not isinstance(val, list) else None
+                if str_val and key == "perf_timer":
+                    var.set("on" if str_val in ("on", "1") else "off")
+                elif str_val and key == "mmap":
+                    var.set("on" if str_val in ("on", "1") else "off")
+                elif str_val and key == "reasoning":
+                    var.set("on" if str_val in ("on", "1") else "off")
+                elif str_val:
+                    var.set(str_val)
+        cache_opts = cfg.get("cache_type_options")
+        if isinstance(cache_opts, list):
+            self.cache_type_options = cache_opts
 
+    def on_profile_selected(self, _=None):
+        name = self.current_profile.get()
+        if not name or name == "(无)": return
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            all_cfg = yaml.safe_load(f) or {}
+        profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
+        if name in profiles:
+            self.apply_profile(name, profiles[name])
+
+    def add_new_profile(self):
+        name = self.new_config_name.get().strip()
+        if not name: return
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            all_cfg = yaml.safe_load(f) or {}
+        profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
+        non_profiles = {k: v for k, v in all_cfg.items() if not isinstance(v, dict)}
+        if name not in profiles:
+            profiles[name] = {}
+        self.config_profiles.append(name)
+        self.current_profile.set(name)
+        self.profile_dropdown.configure(values=self.config_profiles)
+
+    def save_config(self):
+        profile_name = self.current_profile.get()
+        if not profile_name or profile_name == "(无)": return
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            all_cfg = yaml.safe_load(f) or {}
+        profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
+        non_profiles = {k: v for k, v in all_cfg.items() if not isinstance(v, dict)}
+        profile_data = profiles.get(profile_name, {})
+        for key, var in self.var_map.items():
+            profile_data[key] = var.get()
+        cache_opts = self.cache_type_options
+        if isinstance(cache_opts, list):
+            profile_data["cache_type_options"] = cache_opts
+        profiles[profile_name] = profile_data
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+            yaml.dump(dict(non_profiles, **profiles), f, allow_unicode=True, sort_keys=False)
 
     def sync_main_gpu(self, choice):
         if "所有显卡" not in choice:
