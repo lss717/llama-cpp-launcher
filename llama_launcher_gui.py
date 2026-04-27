@@ -18,7 +18,10 @@ try:
 except:
     HAS_NVML = False
 
-CONFIG_FILE = "config.yml"
+import sys
+
+BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, "config.yml")
 
 class LlamaLauncherV6(ctk.CTk):
     def __init__(self):
