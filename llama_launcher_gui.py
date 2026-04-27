@@ -94,7 +94,7 @@ class LlamaLauncherV6(ctk.CTk):
                               extra_btn="刷新", extra_cmd=self.refresh_models)
 
         # Main model + mmproj selection row
-        self.model_sel_row, self.model_dropdown = self.create_model_select_row(
+        self.model_sel_row, self.model_dropdown, self.mmproj_dropdown = self.create_model_select_row(
             path_frame, "模型选择:", self.model_name, [],
             extra_label="多模态:", extra_var=self.mmproj_name, extra_values=["(无)"], extra_width=150)
 
@@ -103,7 +103,7 @@ class LlamaLauncherV6(ctk.CTk):
                                                        browse_cmd=lambda: self.browse_dir(self.draft_model_dir),
                                                        extra_btn="刷新", extra_cmd=self.refresh_draft_models)
 
-        self.draft_sel_row, self.draft_model_dropdown = self.create_model_select_row(
+        self.draft_sel_row, self.draft_model_dropdown, _ = self.create_model_select_row(
             path_frame, "投机模型:", self.draft_model_name, ["(无)"])
 
         self.update_draft_visibility()
@@ -684,9 +684,10 @@ class LlamaLauncherV6(ctk.CTk):
         ctk.CTkLabel(f, text=label, width=90, anchor="w").pack(side="left")
         dropdown = ctk.CTkOptionMenu(f, values=values, variable=var, width=0)
         dropdown.pack(side="left", fill="x", expand=True, padx=(5, 5))
+        extra_dropdown = None
         if extra_label and extra_var is not None:
-            self.create_small_option(f, extra_label, extra_var, extra_values, width=extra_width)
-        return f, dropdown
+            extra_dropdown = self.create_small_option(f, extra_label, extra_var, extra_values, width=extra_width)
+        return f, dropdown, extra_dropdown
 
     def create_small_check(self, parent, label, var, text="启用", width=10):
         ctk.CTkLabel(parent, text=label).pack(side="left", padx=(5, 2))
