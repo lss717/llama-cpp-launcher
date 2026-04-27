@@ -5,7 +5,7 @@ mmproj_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/mmproj-Qwen3.6-27B-BF16.ggu
 model_path: F:/GGUF_models/unsloth/Qwen3.6-27B-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf
 ngl: all
 np_val: '-1'
-port: '8080'
+port: '8081'
 reasoning: 'off'
 server_path: D:/Program Files/llama/turboquant/llama-server.exe
 ts_ratio: '28'
@@ -27,3 +27,20 @@ cache_type_v: turbo4
 mmap: '0'
 draft_max: '0'
 draft_model_path: ''
+model_dir: F:/GGUF_models/unsloth/gemma-4-E4B-it-GGUF
+model_name: gemma-4-E4B-it-UD-Q4_K_XL.gguf
+mmproj_name: mmproj-gemma-4-E4B-it-BF16.gguf
+draft_model_dir: ''
+draft_model_name: (无)
+flash_attn: 'on'
+split_mode: layer
+threads: '-1'
+batch_size: '2048'
+ubatch_size: '512'
+temperature: '0.9'
+top_p: '0.95'
+top_k: '40'
+repeat_penalty: '1.1'
+seed: '-1'
+n_predict: '-1'
+mirostat: '0'

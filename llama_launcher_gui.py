@@ -87,64 +87,87 @@ class LlamaLauncherV6(ctk.CTk):
         path_frame = ctk.CTkFrame(self.main_container)
         path_frame.pack(fill="x", pady=5)
         self.create_input(path_frame, "程序路径:", self.server_path, browse=True)
-        self.create_input(path_frame, "模型路径:", self.model_path, browse=True)
-        self.create_input(path_frame, "多模态路径:", self.mmproj_path, browse=True)
-        self.create_input(path_frame, "投机采样模型:", self.draft_model_path, browse=True)
 
-        param_grid = ctk.CTkFrame(self.main_container)
-        param_grid.pack(fill="x", pady=10)
+        # Main model directory + selection
+        self.create_dir_input(path_frame, "模型目录:", self.model_dir,
+                              browse_cmd=lambda: self.browse_dir(self.model_dir),
+                              extra_btn="刷新", extra_cmd=self.refresh_models)
 
-        row1 = ctk.CTkFrame(param_grid, fg_color="transparent")
-        row1.pack(fill="x", padx=10, pady=5)
-        self.create_small_input(row1, "地址:", self.host)
-        self.create_small_input(row1, "端口:", self.port)
-        self.create_small_input(row1, "NGL:", self.ngl)
-        ctk.CTkLabel(row1, text="上下文:").pack(side="left", padx=(20, 2))
-        ctk.CTkOptionMenu(row1, variable=self.ctx_preset, values=["8192", "32768", "65536", "131072", "262144", "自定义"],
-                         command=lambda c: self.ctx_custom.set(c) if c!="自定义" else None, width=100).pack(side="left", padx=5)
-        ctk.CTkEntry(row1, textvariable=self.ctx_custom, width=80).pack(side="left")
+        # Main model + mmproj selection row
+        self.model_sel_row, self.model_dropdown = self.create_model_select_row(
+            path_frame, "模型选择:", self.model_name, [],
+            extra_label="多模态:", extra_var=self.mmproj_name, extra_values=["(无)"], extra_width=150)
 
-        ctk.CTkLabel(row1, text="内存映射模型:").pack(side="left", padx=(15, 2))
-        ctk.CTkCheckBox(row1, text="启用", variable=self.mmap, width=60).pack(side="left", padx=5)
+        # Draft model directory + selection
+        self.draft_dir_row = self.create_dir_input_row(path_frame, "投机目录:", self.draft_model_dir,
+                                                       browse_cmd=lambda: self.browse_dir(self.draft_model_dir),
+                                                       extra_btn="刷新", extra_cmd=self.refresh_draft_models)
 
-        row2 = ctk.CTkFrame(param_grid, fg_color="transparent")
-        row2.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(row2, text="运行设备:").pack(side="left", padx=(5, 2))
+        self.draft_sel_row, self.draft_model_dropdown = self.create_model_select_row(
+            path_frame, "投机模型:", self.draft_model_name, ["(无)"])
+
+        self.update_draft_visibility()
+
+        param_tabs = ctk.CTkTabview(self.main_container)
+        param_tabs.pack(fill="x", pady=10)
+
+        # Tab 1: API/基础
+        tab_api = param_tabs.add("API/基础")
+        row_api = ctk.CTkFrame(tab_api, fg_color="transparent")
+        row_api.pack(fill="x", padx=10, pady=5)
+        self.create_small_input(row_api, "地址:", self.host)
+        self.create_small_input(row_api, "端口:", self.port)
+        self.create_small_option(row_api, "上下文:", self.ctx_preset,
+                                 ["8192", "32768", "65536", "131072", "262144", "自定义"],
+                                 width=100,
+                                 command=lambda c: self.ctx_custom.set(c) if c != "自定义" else None)
+        self.create_small_input(row_api, "", self.ctx_custom)
+        self.create_small_check(row_api, "思考模式：", self.reasoning, text="开启")
+
+        # Tab 2: GPU/加速
+        tab_gpu = param_tabs.add("GPU/加速")
+        row_gpu = ctk.CTkFrame(tab_gpu, fg_color="transparent")
+        row_gpu.pack(fill="x", padx=10, pady=5)
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
         if len(self.available_gpus) > 1: gpu_opts.append("所有显卡 (并行)")
-        self.gpu_dropdown = ctk.CTkOptionMenu(row2, variable=self.gpu_selection, values=gpu_opts, command=self.sync_main_gpu)
-        self.gpu_dropdown.pack(side="left", padx=5)
-
-        ctk.CTkLabel(row2, text="主卡编号:").pack(side="left", padx=(15, 2))
-        self.main_gpu_dropdown = ctk.CTkOptionMenu(row2, variable=self.main_gpu_index, 
-                                                 values=[str(g['index']) for g in self.available_gpus], width=70)
-        self.main_gpu_dropdown.pack(side="left", padx=5)
-
-        ctk.CTkLabel(row2, text="主卡配比:").pack(side="left", padx=(15, 2))
-        ctk.CTkEntry(row2, textvariable=self.ts_main_val, width=50).pack(side="left", padx=5)
-        self.ts_display = ctk.CTkLabel(row2, text="-> TS: --", text_color="#3498db")
+        self.gpu_dropdown = self.create_small_option(row_gpu, "运行设备:", self.gpu_selection, gpu_opts, command=self.sync_main_gpu)
+        self.main_gpu_dropdown = self.create_small_option(row_gpu, "主卡编号:", self.main_gpu_index,
+                                                          [str(g['index']) for g in self.available_gpus])
+        self.create_small_input(row_gpu, "GPU卸载层数:", self.ngl)
+        self.create_small_option(row_gpu, "拆分模式:", self.split_mode, ["layer", "none", "row"], width=60)
+        self.create_small_input(row_gpu, "主卡配比:", self.ts_main_val)
+        self.ts_display = ctk.CTkLabel(row_gpu, text="-> TS: --", text_color="#3498db")
         self.ts_display.pack(side="left", padx=10)
+        self.create_small_option(row_gpu, "Flash Attention:", self.flash_attn, ["auto", "on", "off"], width=60)
 
-        ctk.CTkLabel(row2, text="K量化：").pack(side="left", padx=(15, 2))
-        ctk.CTkOptionMenu(row2, variable=self.kv_quant_k, values=self.cache_type_options, width=70).pack(side="left", padx=2)
-        ctk.CTkLabel(row2, text="V量化：").pack(side="left", padx=(8, 2))
-        ctk.CTkOptionMenu(row2, variable=self.kv_quant_v, values=self.cache_type_options, width=70).pack(side="left", padx=2)
+        # Tab 3: 采样/生成
+        tab_sample = param_tabs.add("采样/生成")
+        row_sample = ctk.CTkFrame(tab_sample, fg_color="transparent")
+        row_sample.pack(fill="x", padx=10, pady=5)
+        self.create_small_input(row_sample, "温度:", self.temperature)
+        self.create_small_input(row_sample, "限制累计概率:", self.top_p)
+        self.create_small_input(row_sample, "限制候选数量:", self.top_k)
+        self.create_small_input(row_sample, "重复惩罚:", self.repeat_penalty)
+        self.create_small_input(row_sample, "种子:", self.seed)
+        self.create_small_input(row_sample, "预测Token:", self.n_predict)
+        self.create_small_option(row_sample, "Mirostat算法:", self.mirostat, ["0", "1", "2"], width=60)
 
-        ctk.CTkLabel(row2,  text="思考模式：").pack(side="left", padx=(15, 2))
-        ctk.CTkCheckBox(row2, text="开启", variable=self.reasoning, width=90).pack(side="left", padx=10)
-    
-        # 新增优化选项行
-        row3 = ctk.CTkFrame(param_grid, fg_color="transparent")
-        row3.pack(fill="x", padx=10, pady=5)
+        # Tab 4: 高级
+        tab_adv = param_tabs.add("高级")
+        row_adv = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        row_adv.pack(fill="x", padx=10, pady=5)
+        self.create_small_input(row_adv, "并发数:", self.np_val)
+        self.create_small_input(row_adv, "DFlash:", self.draft_max)
+        self.create_small_input(row_adv, "线程数:", self.threads)
+        self.create_small_input(row_adv, "Prompt大小:", self.batch_size)
+        self.create_small_input(row_adv, "UBatch大小:", self.ubatch_size)
+        self.create_small_option(row_adv, "K量化：", self.kv_quant_k, self.cache_type_options)
+        self.create_small_option(row_adv, "V量化：", self.kv_quant_v, self.cache_type_options)
+        self.create_small_check(row_adv, "内存映射模型:", self.mmap)
 
-        ctk.CTkLabel(row3, text="并发数:").pack(side="left", padx=(5, 2))
-        ctk.CTkEntry(row3, textvariable=self.np_val, width=50).pack(side="left", padx=5)
-
-        ctk.CTkLabel(row3,  text="DFlash:").pack(side="left", padx=(5, 2))
-        ctk.CTkEntry(row3, textvariable=self.draft_max, width=50).pack(side="left", padx=5)
-
-        ctk.CTkLabel(row3,  text="性能计时：").pack(side="left", padx=(5, 2))
-        ctk.CTkCheckBox(row3, text="开启", variable=self.perf_timer, width=90).pack(side="left", padx=10)
+        row_adv2 = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        row_adv2.pack(fill="x", padx=10, pady=5)
+        self.create_small_check(row_adv2, "性能计时：", self.perf_timer, text="开启")
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -191,42 +214,144 @@ class LlamaLauncherV6(ctk.CTk):
     def bind_preview_updates(self):
         """为所有影响命令的变量绑定更新函数"""
         vars_to_track = [
-            self.server_path, self.model_path, self.mmproj_path,
+            self.server_path, self.model_dir, self.model_name,
+          self.mmproj_name, self.draft_model_dir, self.draft_model_name,
             self.host, self.port, self.ngl, self.ctx_custom,
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index ,self.np_val,
-            self.draft_max, self.draft_model_path, self.perf_timer, self.mmap
+          self.draft_max, self.perf_timer, self.mmap, self.flash_attn, self.split_mode,
+           self.threads, self.batch_size, self.ubatch_size,
+            self.temperature, self.top_p, self.top_k, self.repeat_penalty,
+            self.seed, self.n_predict, self.mirostat
         ]
         for var in vars_to_track:
             var.trace_add("write", lambda *args: self.update_cmd_preview())
+        self.draft_max.trace_add("write", self.on_draft_max_changed)
 
-    def update_cmd_preview(self):
-        # 1. 处理环境变量显示逻辑
+    def on_draft_max_changed(self, *_):
+        if self.draft_max.get().strip() != "0":
+            self.mmproj_name.set("(无)")
+        self.update_draft_visibility()
+
+    def update_draft_visibility(self):
+        show = self.draft_max.get().strip() != "0"
+        if show:
+            self.draft_dir_row.pack(fill="x", padx=10, pady=2)
+            self.draft_sel_row.pack(fill="x", padx=10, pady=2)
+        else:
+            self.draft_dir_row.pack_forget()
+            self.draft_sel_row.pack_forget()
+
+    def refresh_models(self):
+        d = self.model_dir.get().strip()
+        if not d or not os.path.isdir(d):
+            return
+        all_files = sorted(os.listdir(d))
+        model_files = [f for f in all_files if not f.startswith("mmproj") and not f.startswith(".")]
+        mmproj_files = [f for f in all_files if f.startswith("mmproj")]
+        
+        current_model = self.model_name.get()
+        current_mmproj = self.mmproj_name.get()
+        
+        model_opts = model_files if model_files else ["(无)"]
+        self.model_dropdown.configure(values=model_opts)
+        if current_model not in model_opts and model_files:
+            self.model_name.set(model_files[0])
+        elif current_model in model_opts:
+            self.model_name.set(current_model)
+            
+        mmproj_opts = ["(无)"] + mmproj_files
+        self.mmproj_dropdown.configure(values=mmproj_opts)
+        if current_mmproj not in mmproj_opts and mmproj_files:
+            self.mmproj_name.set(mmproj_files[0])
+        elif current_mmproj in mmproj_opts:
+            self.mmproj_name.set(current_mmproj)
+
+    def refresh_draft_models(self):
+        d = self.draft_model_dir.get().strip()
+        if not d or not os.path.isdir(d):
+            return
+        all_files = sorted(os.listdir(d))
+        model_files = [f for f in all_files if not f.startswith("mmproj") and not f.startswith(".")]
+        
+        current_draft = self.draft_model_name.get()
+        model_opts = model_files if model_files else ["(无)"]
+        self.draft_model_dropdown.configure(values=model_opts)
+        if current_draft not in model_opts and model_files:
+            self.draft_model_name.set(model_files[0])
+        elif current_draft in model_opts:
+            self.draft_model_name.set(current_draft)
+
+    def get_full_model_path(self):
+        d = self.model_dir.get().strip()
+        n = self.model_name.get().strip()
+        if d and n and n != "(无)":
+            return os.path.join(d, n)
+        return ""
+    
+    def get_full_mmproj_path(self):
+        d = self.model_dir.get().strip()
+        n = self.mmproj_name.get().strip()
+        if d and n and n != "(无)":
+            return os.path.join(d, n)
+        return ""
+    
+    def get_full_draft_path(self):
+        d = self.draft_model_dir.get().strip()
+        n = self.draft_model_name.get().strip()
+        if d and n and n != "(无)":
+            return os.path.join(d, n)
+        return ""
+
+    def browse_dir(self, var):
+        p = filedialog.askdirectory()
+        if p: var.set(p)
+
+    def get_cuda_visible_devices(self):
+        """根据GPU选择获取CUDA_VISIBLE_DEVICES值"""
         sel = self.gpu_selection.get()
         if "所有显卡" in sel:
-            visible_ids = ",".join([str(g['index']) for g in self.available_gpus])
-        else:
-            visible_ids = sel.split(":")[0]
-        
-        # 根据系统平台显示不同的环境变量设置命令
-        env_prefix = f"set CUDA_VISIBLE_DEVICES={visible_ids} && " if platform.system() == "Windows" else f"export CUDA_VISIBLE_DEVICES={visible_ids} && "
+            return ",".join([str(g['index']) for g in self.available_gpus])
+        return sel.split(":")[0]
 
-        # 获取当前主卡索引
+    def build_command_list(self, for_display=False):
+        """构建完整的命令，包括环境变量前缀和llama-server参数"""
+        # 1. 构建环境变量前缀
+        env_prefix = ""
+        if platform.system() == "Windows":
+            env_prefix = f"set CUDA_VISIBLE_DEVICES={self.get_cuda_visible_devices()} && "
+        else:
+            env_prefix = f"export CUDA_VISIBLE_DEVICES={self.get_cuda_visible_devices()} && "
+
+        # 2. 构建llama-server命令
         mg_idx = self.main_gpu_index.get() if self.main_gpu_index.get() else "0"
-        # 构建命令列表
+        quote = lambda s: f'"{s}"' if for_display else s
+
         cmd = [
-            f'"{self.server_path.get()}"',
+            quote(self.server_path.get()),
             "--host", self.host.get(),
             "--port", self.port.get(),
-            "-m", f'"{self.model_path.get()}"',
+            "-m", quote(self.get_full_model_path()),
             "-ngl", self.ngl.get(),
             "-mg", mg_idx,
             "-c", self.ctx_custom.get(),
             "-ts", self.ts_final_str.get(),
+            "-sm", self.split_mode.get(),
             "-np", self.np_val.get(),
             "-ctk", self.kv_quant_k.get(),
             "-ctv", self.kv_quant_v.get(),
+            "-t", self.threads.get(),
+            "-b", self.batch_size.get(),
+            "-ub", self.ubatch_size.get(),
+            "--temp", self.temperature.get(),
+            "--top-p", self.top_p.get(),
+            "--top-k", self.top_k.get(),
+            "--repeat-penalty", self.repeat_penalty.get(),
+            "-s", self.seed.get(),
+            "-n", self.n_predict.get(),
         ]
+        if int(self.mirostat.get()) != 0:
+            cmd.extend(["--mirostat", self.mirostat.get()])
         if self.reasoning.get() == "1" or self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
         else:
@@ -244,17 +369,27 @@ class LlamaLauncherV6(ctk.CTk):
         else:
             cmd.append("--mmap")
 
-        if self.mmproj_path.get():
-            cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
-        if draft_val and draft_val != "0" and self.draft_model_path.get():
-            cmd.extend(["-md", f'"{self.draft_model_path.get()}"'])
-        # 4. 组合最终显示的字符串
-        full_display_str = env_prefix + " ".join(cmd)
-        
-        # 更新文本框内容
+        if self.flash_attn.get() != "auto":
+            cmd.extend(["-fa", self.flash_attn.get()])
+
+        mmproj_full = self.get_full_mmproj_path()
+        if mmproj_full:
+            cmd.extend(["-mm", quote(mmproj_full)])
+        draft_full = self.get_full_draft_path()
+        if draft_val and draft_val != "0" and draft_full:
+            cmd.extend(["-md", quote(draft_full)])
+
+        # 3. 返回完整命令字符串（含环境变量）或纯命令列表
+        if for_display:
+            return env_prefix + " ".join(cmd)
+        return cmd
+
+    def update_cmd_preview(self):
+        """更新命令行预览显示"""
+        cmd_str = self.build_command_list(for_display=True)
         self.cmd_display.configure(state="normal")
         self.cmd_display.delete("1.0", "end")
-        self.cmd_display.insert("1.0", full_display_str)
+        self.cmd_display.insert("1.0", cmd_str)
         self.cmd_display.configure(state="disabled")
 
     def start_monitor_thread(self):
@@ -345,56 +480,13 @@ class LlamaLauncherV6(ctk.CTk):
 
         # 1. 准备环境变量
         env = os.environ.copy()
-        sel = self.gpu_selection.get()
-
-        if "所有显卡" in sel:
-            # 暴露所有可用显卡的 ID
-            visible_ids = [str(g['index']) for g in self.available_gpus]
-            env["CUDA_VISIBLE_DEVICES"] = ",".join(visible_ids)
-        else:
-            # 仅暴露选中的单张显卡 ID
-            target_id = sel.split(":")[0]
-            env["CUDA_VISIBLE_DEVICES"] = target_id
+        env["CUDA_VISIBLE_DEVICES"] = self.get_cuda_visible_devices()
 
         # 2. 构建命令
-        cmd = [
-            f'"{self.server_path.get()}"',
-            "--host", self.host.get(),
-            "--port", self.port.get(),
-            "-m", f'"{self.model_path.get()}"',
-            "-ngl", self.ngl.get(),
-            "-mg", self.main_gpu_index.get(), # 指定主卡
-            "-c", self.ctx_custom.get(),
-            "-ts", self.ts_final_str.get(),
-            "-np", self.np_val.get(),
-            "-ctk", self.kv_quant_k.get(),
-            "-ctv", self.kv_quant_v.get(),
-        ]
-        if self.reasoning.get() == "1" or self.reasoning.get() == "on":
-            cmd.extend(["--reasoning", "on"])
-        else:
-            cmd.extend(["--reasoning", "off"])
-        if self.mmproj_path.get(): cmd.extend(["-mm", f'"{self.mmproj_path.get()}"'])
-
-        draft_val = self.draft_max.get().strip()
-        if draft_val and draft_val != "0":
-            cmd.extend(["--draft", draft_val])
-        if draft_val and draft_val != "0" and self.draft_model_path.get():
-            cmd.extend(["-md", f'"{self.draft_model_path.get()}"'])
-        if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
-            cmd.append("--perf")
-
-        if self.mmap.get() == "0" or self.mmap.get() == "off":
-            cmd.append("--no-mmap")
-        else:
-            cmd.append("--mmap")
-
-        env = os.environ.copy()
-        sel = self.gpu_selection.get()
-        env["CUDA_VISIBLE_DEVICES"] = ",".join([str(g['index']) for g in self.available_gpus]) if "所有" in sel else sel.split(":")[0]
+        cmd = self.build_command_list(for_display=False)
 
         def run():
-            self.process = subprocess.Popen(" ".join(cmd), env=env, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            self.process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             self.running = True
             for line in iter(self.process.stdout.readline, ""):
                 self.log_queue.put(line)
@@ -405,11 +497,22 @@ class LlamaLauncherV6(ctk.CTk):
         self.stop_btn.configure(state="enabled")
 
     def stop_server(self):
-        if self.process:
-            # 执行强制结束命令
-            os.system("taskkill /IM llama-server.exe /F")
+        if self.process and self.process.poll() is None:
+            try:
+                pid = self.process.pid
+                proc = psutil.Process(pid)
+                for child in proc.children(recursive=True):
+                    child.terminate()
+                proc.terminate()
+                gone, alive = psutil.wait_procs([proc] + proc.children(recursive=True), timeout=3)
+                for p in alive:
+                    try:
+                        p.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+            except Exception as e:
+                print(f"终止进程异常: {e}")
         
-            # 发送停止成功的提示到日志队列
             stop_msg = "\n" + "="*20 + " 服务停止成功 " + "="*20 + "\n"
             self.log_queue.put(stop_msg)
         
@@ -426,8 +529,11 @@ class LlamaLauncherV6(ctk.CTk):
     def load_config(self):
         default_config = {
             "server_path": r"D:\Program Files\llama\llama-server.exe",
-            "model_path": "",
-            "mmproj_path": "",
+            "model_dir": "",
+            "model_name": "",
+           "mmproj_name": "",
+            "draft_model_dir": "",
+            "draft_model_name": "",
             "host": "0.0.0.0",
             "port": "8080",
             "ngl": "all",
@@ -445,9 +551,11 @@ class LlamaLauncherV6(ctk.CTk):
                 if user_cfg: default_config.update(user_cfg)
         
         self.server_path = ctk.StringVar(value=default_config["server_path"])
-        self.model_path = ctk.StringVar(value=default_config["model_path"])
-        self.mmproj_path = ctk.StringVar(value=default_config["mmproj_path"])
-        self.draft_model_path = ctk.StringVar(value=default_config.get("draft_model_path", ""))
+        self.model_dir = ctk.StringVar(value=default_config.get("model_dir", ""))
+        self.model_name = ctk.StringVar(value=default_config.get("model_name", ""))
+        self.mmproj_name = ctk.StringVar(value=default_config.get("mmproj_name", ""))
+        self.draft_model_dir = ctk.StringVar(value=default_config.get("draft_model_dir", ""))
+        self.draft_model_name = ctk.StringVar(value=default_config.get("draft_model_name", ""))
         self.host = ctk.StringVar(value=default_config["host"])
         self.port = ctk.StringVar(value=default_config["port"])
         self.ngl = ctk.StringVar(value=default_config["ngl"])
@@ -457,9 +565,21 @@ class LlamaLauncherV6(ctk.CTk):
         self.kv_quant_k = ctk.StringVar(value=default_config.get("cache_type_k", cache_type_default))
         self.kv_quant_v = ctk.StringVar(value=default_config.get("cache_type_v", cache_type_default))
         self.np_val = ctk.StringVar(value=default_config["np_val"])
+        self.flash_attn = ctk.StringVar(value=default_config.get("flash_attn", "auto"))
+        self.split_mode = ctk.StringVar(value=default_config.get("split_mode", "layer"))
         self.draft_max = ctk.StringVar(value=default_config.get("draft_max", "16"))
         self.perf_timer = ctk.StringVar(value="off")
         self.mmap = ctk.StringVar(value=default_config.get("mmap", "off"))
+        self.threads = ctk.StringVar(value=default_config.get("threads", "-1"))
+        self.batch_size = ctk.StringVar(value=default_config.get("batch_size", "2048"))
+        self.ubatch_size = ctk.StringVar(value=default_config.get("ubatch_size", "512"))
+        self.temperature = ctk.StringVar(value=default_config.get("temperature", "0.8"))
+        self.top_p = ctk.StringVar(value=default_config.get("top_p", "0.95"))
+        self.top_k = ctk.StringVar(value=default_config.get("top_k", "40"))
+        self.repeat_penalty = ctk.StringVar(value=default_config.get("repeat_penalty", "1.0"))
+        self.seed = ctk.StringVar(value=default_config.get("seed", "-1"))
+        self.n_predict = ctk.StringVar(value=default_config.get("n_predict", "-1"))
+        self.mirostat = ctk.StringVar(value=default_config.get("mirostat", "0"))
         self.ctx_preset = ctk.StringVar(value="自定义")
         self.reasoning = ctk.StringVar(value="off")
         self.cache_type_options = default_config.get("cache_type_options", ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"])
@@ -480,8 +600,11 @@ class LlamaLauncherV6(ctk.CTk):
         # 更新 GUI 管理的字段
         cfg.update({
             "server_path": self.server_path.get(),
-            "model_path": self.model_path.get(),
-            "mmproj_path": self.mmproj_path.get(),
+            "model_dir": self.model_dir.get(),
+            "model_name": self.model_name.get(),
+            "mmproj_name": self.mmproj_name.get(),
+            "draft_model_dir": self.draft_model_dir.get(),
+            "draft_model_name": self.draft_model_name.get(),
             "host": self.host.get(),
             "port": self.port.get(),
             "ngl": self.ngl.get(),
@@ -492,7 +615,21 @@ class LlamaLauncherV6(ctk.CTk):
             "cache_type_v": self.kv_quant_v.get(),
             "mmap": self.mmap.get(),
             "draft_max": self.draft_max.get(),
-            "draft_model_path": self.draft_model_path.get(),
+         "flash_attn": self.flash_attn.get(),
+           "split_mode": self.split_mode.get(),
+            "threads": self.threads.get(),
+            "batch_size": self.batch_size.get(),
+            "ubatch_size": self.ubatch_size.get(),
+            "temperature": self.temperature.get(),
+            "top_p": self.top_p.get(),
+            "top_k": self.top_k.get(),
+            "repeat_penalty": self.repeat_penalty.get(),
+            "seed": self.seed.get(),
+            "n_predict": self.n_predict.get(),
+            "mirostat": self.mirostat.get(),
+            "threads": self.threads.get(),
+            "batch_size": self.batch_size.get(),
+            "ubatch_size": self.ubatch_size.get(),
         })
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -517,14 +654,43 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_display.configure(text=f"-> TS: {self.ts_final_str.get()}")
 
     def create_input(self, parent, label, var, browse=False):
+        self.create_dir_input(parent, label, var, browse_cmd=lambda: self.browse(var), extra_btn=None, extra_cmd=None)
+
+    def create_dir_input(self, parent, label, var, browse_cmd=None, extra_btn=None, extra_cmd=None):
+        self.create_dir_input_row(parent, label, var, browse_cmd, extra_btn, extra_cmd)
+
+    def create_dir_input_row(self, parent, label, var, browse_cmd=None, extra_btn=None, extra_cmd=None):
         f = ctk.CTkFrame(parent, fg_color="transparent"); f.pack(fill="x", padx=10, pady=2)
         ctk.CTkLabel(f, text=label, width=90, anchor="w").pack(side="left")
-        ctk.CTkEntry(f, textvariable=var).pack(side="left", fill="x", expand=True, padx=10)
-        if browse: ctk.CTkButton(f, text="...", width=40, command=lambda: self.browse(var)).pack(side="right")
+        ctk.CTkEntry(f, textvariable=var).pack(side="left", fill="x", expand=True, padx=(5, 5))
+        if browse_cmd:
+            ctk.CTkButton(f, text="...", width=40, command=browse_cmd).pack(side="right", padx=(0, 5))
+        if extra_btn and extra_cmd:
+            ctk.CTkButton(f, text=extra_btn, width=45, command=extra_cmd).pack(side="right")
+        return f
 
-    def create_small_input(self, parent, label, var):
+    def create_small_input(self, parent, label, var, width=70):
         ctk.CTkLabel(parent, text=label).pack(side="left", padx=(5, 2))
-        ctk.CTkEntry(parent, textvariable=var, width=70).pack(side="left", padx=5)
+        ctk.CTkEntry(parent, textvariable=var, width=width).pack(side="left", padx=5)
+
+    def create_small_option(self, parent, label, var, values, width=70, command=None):
+        ctk.CTkLabel(parent, text=label).pack(side="left", padx=(5, 2))
+        dropdown = ctk.CTkOptionMenu(parent, variable=var, values=values, width=width, command=command)
+        dropdown.pack(side="left", padx=5)
+        return dropdown
+
+    def create_model_select_row(self, parent, label, var, values, extra_label=None, extra_var=None, extra_values=None, extra_width=150):
+        f = ctk.CTkFrame(parent, fg_color="transparent"); f.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f, text=label, width=90, anchor="w").pack(side="left")
+        dropdown = ctk.CTkOptionMenu(f, values=values, variable=var, width=0)
+        dropdown.pack(side="left", fill="x", expand=True, padx=(5, 5))
+        if extra_label and extra_var is not None:
+            self.create_small_option(f, extra_label, extra_var, extra_values, width=extra_width)
+        return f, dropdown
+
+    def create_small_check(self, parent, label, var, text="启用", width=10):
+        ctk.CTkLabel(parent, text=label).pack(side="left", padx=(5, 2))
+        ctk.CTkCheckBox(parent, text=text, variable=var, width=width).pack(side="left", padx=5)
 
     def browse(self, var):
         p = filedialog.askopenfilename()
