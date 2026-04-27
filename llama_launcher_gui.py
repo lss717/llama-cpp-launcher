@@ -542,6 +542,7 @@ class LlamaLauncherV6(ctk.CTk):
             "cache_type": "q8_0",
             "np_val": "1",
             "mmap": "off",
+            "perf_timer": "off",
             "draft_max": "0"
         }
 
@@ -568,7 +569,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.flash_attn = ctk.StringVar(value=default_config.get("flash_attn", "auto"))
         self.split_mode = ctk.StringVar(value=default_config.get("split_mode", "layer"))
         self.draft_max = ctk.StringVar(value=default_config.get("draft_max", "16"))
-        self.perf_timer = ctk.StringVar(value="off")
+        self.perf_timer = ctk.StringVar(value=default_config.get("perf_timer", "off"))
         self.mmap = ctk.StringVar(value=default_config.get("mmap", "off"))
         self.threads = ctk.StringVar(value=default_config.get("threads", "-1"))
         self.batch_size = ctk.StringVar(value=default_config.get("batch_size", "2048"))
@@ -615,8 +616,9 @@ class LlamaLauncherV6(ctk.CTk):
             "cache_type_v": self.kv_quant_v.get(),
             "mmap": self.mmap.get(),
             "draft_max": self.draft_max.get(),
-         "flash_attn": self.flash_attn.get(),
-           "split_mode": self.split_mode.get(),
+            "perf_timer": self.perf_timer.get(),
+            "flash_attn": self.flash_attn.get(),
+            "split_mode": self.split_mode.get(),
             "threads": self.threads.get(),
             "batch_size": self.batch_size.get(),
             "ubatch_size": self.ubatch_size.get(),
@@ -627,9 +629,6 @@ class LlamaLauncherV6(ctk.CTk):
             "seed": self.seed.get(),
             "n_predict": self.n_predict.get(),
             "mirostat": self.mirostat.get(),
-            "threads": self.threads.get(),
-            "batch_size": self.batch_size.get(),
-            "ubatch_size": self.ubatch_size.get(),
         })
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
