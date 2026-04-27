@@ -352,7 +352,7 @@ class LlamaLauncherV6(ctk.CTk):
         ]
         if int(self.mirostat.get()) != 0:
             cmd.extend(["--mirostat", self.mirostat.get()])
-        if self.reasoning.get() == "1" or self.reasoning.get() == "on":
+        if self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
         else:
             cmd.extend(["--reasoning", "off"])
@@ -361,10 +361,10 @@ class LlamaLauncherV6(ctk.CTk):
         if draft_val and draft_val != "0":
             cmd.extend(["--draft", draft_val])
 
-        if self.perf_timer.get() == "1" or self.perf_timer.get() == "on":
+        if self.perf_timer.get() == "on":
             cmd.append("--perf")
 
-        if self.mmap.get() == "0" or self.mmap.get() == "off":
+        if self.mmap.get() != "on":
             cmd.append("--no-mmap")
         else:
             cmd.append("--mmap")
@@ -569,8 +569,8 @@ class LlamaLauncherV6(ctk.CTk):
         self.flash_attn = ctk.StringVar(value=default_config.get("flash_attn", "auto"))
         self.split_mode = ctk.StringVar(value=default_config.get("split_mode", "layer"))
         self.draft_max = ctk.StringVar(value=default_config.get("draft_max", "16"))
-        self.perf_timer = ctk.StringVar(value=default_config.get("perf_timer", "off"))
-        self.mmap = ctk.StringVar(value=default_config.get("mmap", "off"))
+        self.perf_timer = ctk.StringVar(value="on" if default_config.get("perf_timer", "") in ("on", "1") else "off")
+        self.mmap = ctk.StringVar(value="on" if default_config.get("mmap", "") in ("on", "1") else "off")
         self.threads = ctk.StringVar(value=default_config.get("threads", "-1"))
         self.batch_size = ctk.StringVar(value=default_config.get("batch_size", "2048"))
         self.ubatch_size = ctk.StringVar(value=default_config.get("ubatch_size", "512"))
@@ -582,7 +582,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.n_predict = ctk.StringVar(value=default_config.get("n_predict", "-1"))
         self.mirostat = ctk.StringVar(value=default_config.get("mirostat", "0"))
         self.ctx_preset = ctk.StringVar(value="自定义")
-        self.reasoning = ctk.StringVar(value="off")
+        self.reasoning = ctk.StringVar(value="on" if default_config.get("reasoning", "") in ("on", "1") else "off")
         self.cache_type_options = default_config.get("cache_type_options", ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"])
         self.ts_final_str = ctk.StringVar(value="1")
 
@@ -690,7 +690,7 @@ class LlamaLauncherV6(ctk.CTk):
 
     def create_small_check(self, parent, label, var, text="启用", width=10):
         ctk.CTkLabel(parent, text=label).pack(side="left", padx=(5, 2))
-        ctk.CTkCheckBox(parent, text=text, variable=var, width=width).pack(side="left", padx=5)
+        ctk.CTkCheckBox(parent, text=text, variable=var, onvalue="on", offvalue="off", width=width).pack(side="left", padx=5)
 
     def browse(self, var):
         p = filedialog.askopenfilename()
