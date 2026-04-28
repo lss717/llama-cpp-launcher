@@ -16,7 +16,7 @@ if getattr(sys, 'frozen', False):
     _mp.freeze_support()  # Prevents child processes from re-running the whole script
 
 import customtkinter as ctk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import psutil
 import cpuinfo
 
@@ -140,9 +140,10 @@ class LlamaLauncherV6(ctk.CTk):
         self.profile_dropdown = ctk.CTkOptionMenu(cfg_bar, variable=self.current_profile, values=profile_values, width=180, command=self.on_profile_selected)
         self.profile_dropdown.pack(side="left", padx=(0, 5))
 
+        ctk.CTkButton(cfg_bar, text="保存", width=45, fg_color="#f1c40f", command=self.save_config).pack(side="left", padx=(0, 2))
+        ctk.CTkButton(cfg_bar, text="删除", width=40, fg_color="#e74c3c", command=self.delete_profile).pack(side="left", padx=(0, 5))
         ctk.CTkEntry(cfg_bar, textvariable=self.new_config_name, placeholder_text="新配置名称").pack(side="left", fill="x", expand=True, padx=2)
-        ctk.CTkButton(cfg_bar, text="+新增", width=45, command=self.add_new_profile).pack(side="right", padx=(0, 2))
-        ctk.CTkButton(cfg_bar, text="保存", width=45, command=self.save_config).pack(side="right")
+        ctk.CTkButton(cfg_bar, text="+新增", width=45, fg_color="#2ecc71", command=self.add_new_profile).pack(side="right")
 
         # --- 需求 3: 将监控部分放在程序路径上面 ---
         self.monitor_frame = ctk.CTkFrame(self.main_container, height=120, fg_color="#1a1a1a")
@@ -580,7 +581,7 @@ class LlamaLauncherV6(ctk.CTk):
         cmd = self.build_command_list(for_display=False)
 
         def run():
-            self.process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            self.process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
             self.running = True
             for line in iter(self.process.stdout.readline, ""):
                 self.log_queue.put(line)
@@ -731,9 +732,29 @@ class LlamaLauncherV6(ctk.CTk):
         if name in profiles:
             self.apply_profile(name, profiles[name])
 
+    def delete_profile(self):
+        name = self.current_profile.get()
+        if not name or name == "(无)": return
+        all_cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                all_cfg = yaml.safe_load(f) or {}
+        profiles = {k: v for k, v in all_cfg.items() if isinstance(v, dict)}
+        non_profiles = {k: v for k, v in all_cfg.items() if not isinstance(v, dict)}
+        if name in profiles:
+            del profiles[name]
+            self.config_profiles.remove(name)
+            profile_values = self.config_profiles if self.config_profiles else ["(无)"]
+            self.profile_dropdown.configure(values=profile_values)
+            self.current_profile.set(profile_values[0])
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                yaml.dump(dict(non_profiles, **profiles), f, allow_unicode=True, sort_keys=False)
+
     def add_new_profile(self):
         name = self.new_config_name.get().strip()
-        if not name: return
+        if not name:
+            messagebox.showwarning("提示", "配置名称不能为空")
+            return
         all_cfg = {}
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
