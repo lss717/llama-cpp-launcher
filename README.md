@@ -138,7 +138,7 @@ MyModel:
 |------|------|
 | `customtkinter>=5.0.0` | 现代化 GUI 框架 |
 | `pyyaml>=6.0` | YAML 配置读写 |
-| `pynvml>=0.31` | NVIDIA GPU 监控 |
+| `nvidia-ml-py` | NVIDIA GPU 监控 |
 | `psutil>=5.9.0` | CPU/内存监控系统资源 |
 | `py-cpuinfo>=1.0.5` | 获取处理器型号信息 |
 | **打包依赖** ||

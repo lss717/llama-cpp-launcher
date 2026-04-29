@@ -25,7 +25,7 @@ try:
     pynvml.nvmlInit()
     HAS_NVML = True
 except Exception as e:
-    print(f"[WARN] pynvml 初始化失败: {e}")
+    print(f"[WARN] NVML 初始化失败: {e}")
     HAS_NVML = False
 
 # PyInstaller onefile: sys.executable points to temp _MEI folder, use parent process instead
@@ -128,10 +128,12 @@ class LlamaLauncherV6(ctk.CTk):
     def setup_ui(self):
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
+        self.main_container.grid_rowconfigure(4, weight=1)
+        self.main_container.grid_columnconfigure(0, weight=1)
 
         # 配置选择栏 (左上角)
         cfg_bar = ctk.CTkFrame(self.main_container, height=35, fg_color="#1a1a1a")
-        cfg_bar.pack(fill="x", pady=(0, 8))
+        cfg_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         cfg_bar.pack_propagate(False)
 
         ctk.CTkLabel(cfg_bar, text="配置:", width=50, anchor="w").pack(side="left", padx=(5, 2))
@@ -147,7 +149,7 @@ class LlamaLauncherV6(ctk.CTk):
 
         # --- 需求 3: 将监控部分放在程序路径上面 ---
         self.monitor_frame = ctk.CTkFrame(self.main_container, height=120, fg_color="#1a1a1a")
-        self.monitor_frame.pack(fill="x", pady=(0, 15))
+        self.monitor_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
         self.mon_labels = {}
 
         # 监控项渲染 (使用 Grid 布局)
@@ -165,7 +167,7 @@ class LlamaLauncherV6(ctk.CTk):
 
         # --- 原有路径与参数区 ---
         path_frame = ctk.CTkFrame(self.main_container)
-        path_frame.pack(fill="x", pady=5)
+        path_frame.grid(row=2, column=0, sticky="ew", pady=5)
         self.create_input(path_frame, "程序路径:", self.server_path, browse=True)
 
         # Main model directory + selection
@@ -189,7 +191,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.update_draft_visibility()
 
         param_tabs = ctk.CTkTabview(self.main_container)
-        param_tabs.pack(fill="x", pady=10)
+        param_tabs.grid(row=3, column=0, sticky="ew", pady=10)
 
         # Tab 1: API/基础
         tab_api = param_tabs.add("API/基础")
@@ -258,26 +260,27 @@ class LlamaLauncherV6(ctk.CTk):
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        log_box.pack(fill="both", expand=True, pady=10)
+        log_box.grid(row=4, column=0, sticky="nsew", pady=(5, 2))
+        log_box.grid_rowconfigure(1, weight=0)
+        log_box.grid_rowconfigure(3, weight=6)
+        log_box.grid_columnconfigure(0, weight=1)
 
         # 命令预览
-        ctk.CTkLabel(log_box, text="[ 命令行预览 ]", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ctk.CTkLabel(log_box, text="[ 命令行预览 ]", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
         self.cmd_display = ctk.CTkTextbox(
                 log_box,
-                font=("Consolas", 10),  # 稍微缩小预览字体，更显精炼
+                font=("Consolas", 10),
                 text_color="#3498db",
-                height=70,              # 固定高度，防止它无限拉伸
-                activate_scrollbars=False # 预览较短时可关闭滚动条，视觉更统一
+                height=60,
+                activate_scrollbars=False
             )
-        # 缩小上方间距
-        self.cmd_display.pack(fill="x", pady=(2, 8))
-        # 初始设为只读
+        self.cmd_display.grid(row=1, column=0, sticky="nsew", pady=(2, 4))
         self.cmd_display.configure(state="disabled")
 
         # 日志区
-        ctk.CTkLabel(log_box, text="[ 实时运行日志 ]", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ctk.CTkLabel(log_box, text="[ 实时运行日志 ]", font=("Segoe UI", 12, "bold")).grid(row=2, column=0, sticky="w")
         self.log_display = ctk.CTkTextbox(log_box, font=("Consolas", 11), fg_color="#0d0d0d")
-        self.log_display.pack(fill="both", expand=True, pady=5)
+        self.log_display.grid(row=3, column=0, sticky="nsew", pady=(0, 5))
 
         # 配置日志颜色标签
         self.log_display.tag_config("info", foreground="#2ecc71")
@@ -287,7 +290,7 @@ class LlamaLauncherV6(ctk.CTk):
 
         # 4. 按钮
         btn_row = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        btn_row.pack(fill="x", pady=5)
+        btn_row.grid(row=5, column=0, sticky="ew", pady=5)
         self.start_btn = ctk.CTkButton(btn_row, text="🚀 启动服务", fg_color="#2ecc71", command=self.start_server, height=40)
         self.start_btn.pack(side="left", expand=True, padx=5)
         self.stop_btn = ctk.CTkButton(btn_row, text="🛑 停止服务", fg_color="#e74c3c", command=self.stop_server, state="disabled", height=40)
@@ -669,7 +672,10 @@ class LlamaLauncherV6(ctk.CTk):
         self.ts_final_str = ctk.StringVar(value="1")
 
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
-        if len(gpu_opts) > 1: gpu_opts.append("所有显卡 (并行)")
+        if not gpu_opts:
+            gpu_opts.append("CPU (无显卡)")
+        elif len(gpu_opts) > 1:
+            gpu_opts.append("所有显卡 (并行)")
         self.gpu_selection = ctk.StringVar(value=gpu_opts[-1])
         self.main_gpu_index = ctk.StringVar(value="0")
 
