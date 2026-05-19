@@ -1,6 +1,6 @@
 # Llama-CPP Server Launcher
 
-图形化的 llama.cpp server 启动工具，支持多配置管理、投机解码、实时资源监控和全参数可视化配置。
+图形化的 llama.cpp server 启动工具，支持多配置管理、实时资源监控、Token统计和参数可视化配置。
 
 ## 功能概览
 
@@ -16,29 +16,22 @@
 
 ### 智能显卡管理
 - 自动检测 NVIDIA 显卡，支持单卡或多卡并行
-- 自动计算 Tensor Split (`-ts`)，可设置主卡权重配比
-- 自动配置 `CUDA_VISIBLE_DEVICES` 环境变量
+- 自动计算 Tensor Split (`--tensor-split`)，可设置主卡权重配比
+- 通过 `--main-gpu` 和 `--tensor-split` 控制多卡分配
 
 ### 模型目录浏览
 - **主模型**：设置目录后一键刷新，自动列出所有 GGUF 文件
 - **多模态投影器 (mmproj)**：自动识别 `mmproj-*` 文件
-- **投机草稿模型**：独立目录管理，支持 DFlash 等加速方案
 
 ### 分 Tab 参数配置
 | Tab | 包含参数 |
 |-----|---------|
 | **API/基础** | 地址、端口、上下文长度（预设+自定义）、思考模式 |
-| **GPU/加速** | 运行设备、主卡编号、GPU层数(-ngl)、拆分模式(-sm)、Flash Attention、TS配比 |
-| **采样/生成** | 温度、top-p、top-k、重复惩罚、随机种子、预测Token数、Mirostat |
-| **高级** | 并发数、投机解码(DFlash)、草稿模型GPU层数、线程数、批处理大小、KV量化类型(K/V独立)、内存映射、性能计时、额外参数 |
+| **GPU/加速** | 运行设备、主卡编号、GPU层数(--gpu-layers)、拆分模式(--split-mode)、Flash Attention、TS配比 |
+| **高级** | KV量化类型(K/V独立)、内存映射、性能计时、额外参数 |
 
 ### KV 缓存量化支持
-f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1 / turbo2 / turbo3 / turbo4（K/V 独立设置）
-
-### 投机解码 (Speculative Decoding)
-- 设置 `--draft` 参数启用草稿 Token 数量
-- 支持配置独立的草稿模型目录和文件选择
-- 可调节草稿模型的 GPU 卸载层数 (`--ngld`)
+f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1（K/V 独立设置）
 
 ### 实时日志与统计
 - Token 数量、生成速率 (tokens/s)、上下文占用百分比
@@ -70,8 +63,6 @@ MyModel:
   model_dir: "F:/models/my-model"
   model_name: "model-q4_k_m.gguf"
   mmproj_name: "(无)"
-  draft_model_dir: ""
-  draft_model_name: "(无)"
   host: "0.0.0.0"
   port: "8080"
   ngl: "all"
@@ -79,23 +70,13 @@ MyModel:
   ts_ratio: "28"
   cache_type_k: "q8_0"
   cache_type_v: "q8_0"
-  np_val: "-1"
   mmap: "on"
-  draft_max: "0"
   perf_timer: "off"
   flash_attn: "auto"
   split_mode: "layer"
-  threads: "-1"
-  batch_size: "2048"
-  ubatch_size: "512"
-  temperature: "0.8"
-  top_p: "0.95"
-  top_k: "40"
-  repeat_penalty: "1.0"
-  seed: "-1"
-  n_predict: "-1"
-  mirostat: "0"
   reasoning: "off"
+  extra_args: ""
+  gpu_selection: "0: NVIDIA GeForce RTX 4070 SUPER"
 ```
 
 ## 使用流程
