@@ -220,6 +220,7 @@ class LlamaLauncherV6(ctk.CTk):
         row_adv.pack(fill="x", padx=10, pady=5)
         self.kv_dropdown_k = self.create_small_option(row_adv, "K量化：", self.kv_quant_k, self.cache_type_options)
         self.kv_dropdown_v = self.create_small_option(row_adv, "V量化：", self.kv_quant_v, self.cache_type_options)
+        self.create_small_input(row_adv, "并发量:", self.n_parallel, width=70)
         self.create_small_check(row_adv, "内存映射模型:", self.mmap)
         self.create_small_check(row_adv, "性能计时：", self.perf_timer, text="开启")
 
@@ -281,7 +282,7 @@ class LlamaLauncherV6(ctk.CTk):
             self.server_path, self.model_dir, self.model_name,
             self.mmproj_name, self.host, self.port, self.ngl, self.ctx_custom,
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
-            self.gpu_selection, self.main_gpu_index,
+            self.gpu_selection, self.main_gpu_index, self.n_parallel,
             self.perf_timer, self.mmap, self.flash_attn, self.split_mode,
             self.extra_args
         ]
@@ -355,6 +356,7 @@ class LlamaLauncherV6(ctk.CTk):
             "--split-mode", self.split_mode.get(),
             "--cache-type-k", self.kv_quant_k.get(),
             "--cache-type-v", self.kv_quant_v.get(),
+            "--parallel", self.n_parallel.get(),
         ]
         if self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
@@ -548,6 +550,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.ctx_preset = ctk.StringVar(value="自定义")
         self.reasoning = ctk.StringVar(value="off")
         self.cache_type_options = ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"]
+        self.n_parallel = ctk.StringVar(value="-1")
         self.extra_args = ctk.StringVar()
         self.ts_final_str = ctk.StringVar(value="1")
 
@@ -568,7 +571,8 @@ class LlamaLauncherV6(ctk.CTk):
             "mmap": self.mmap,
             "perf_timer": self.perf_timer, "flash_attn": self.flash_attn,
             "split_mode": self.split_mode, "reasoning": self.reasoning,
-            "gpu_selection": self.gpu_selection, "extra_args": self.extra_args,
+            "gpu_selection": self.gpu_selection, "n_parallel": self.n_parallel,
+            "extra_args": self.extra_args,
         }
 
         self.new_config_name = ctk.StringVar()
