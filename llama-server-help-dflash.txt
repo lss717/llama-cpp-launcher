@@ -39,6 +39,7 @@
                                         (env: LLAMA_ARG_SWA_FULL)
 -fa,   --flash-attn [on|off|auto]       set Flash Attention use ('on', 'off', or 'auto', default: 'auto')
                                         (env: LLAMA_ARG_FLASH_ATTN)
+--no-fused-gdn                          disable fused Gated Delta Net kernels (use decomposed ops instead)
 --perf, --no-perf                       whether to enable internal libllama performance timings (default:
                                         false)
                                         (env: LLAMA_ARG_PERF)
@@ -75,16 +76,18 @@
                                         (env: LLAMA_ARG_NO_HOST)
 -ctk,  --cache-type-k TYPE              KV cache data type for K
                                         allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1,
-                                        turbo2, turbo3, turbo4
+                                        turbo2, turbo3, turbo4, turbo3_tcq, turbo2_tcq
                                         (default: f16)
                                         (env: LLAMA_ARG_CACHE_TYPE_K)
 -ctv,  --cache-type-v TYPE              KV cache data type for V
                                         allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1,
-                                        turbo2, turbo3, turbo4
+                                        turbo2, turbo3, turbo4, turbo3_tcq, turbo2_tcq
                                         (default: f16)
                                         (env: LLAMA_ARG_CACHE_TYPE_V)
 -dt,   --defrag-thold N                 KV cache defragmentation threshold (DEPRECATED)
                                         (env: LLAMA_ARG_DEFRAG_THOLD)
+--rpc SERVERS                           comma separated list of RPC servers (host:port)
+                                        (env: LLAMA_ARG_RPC)
 --mlock                                 force system to keep model in RAM rather than swapping or compressing
                                         (env: LLAMA_ARG_MLOCK)
 --mmap, --no-mmap                       whether to memory-map model. (if mmap disabled, slower load but may
@@ -209,20 +212,20 @@
                                         (default: 3)
 
                                         (env: LLAMA_LOG_VERBOSITY)
---log-prefix, --no-log-prefix           Enable prefix in log messages
-                                        (env: LLAMA_ARG_LOG_PREFIX)
---log-timestamps, --no-log-timestamps   Enable timestamps in log messages
-                                        (env: LLAMA_ARG_LOG_TIMESTAMPS)
+--log-prefix                            Enable prefix in log messages
+                                        (env: LLAMA_LOG_PREFIX)
+--log-timestamps                        Enable timestamps in log messages
+                                        (env: LLAMA_LOG_TIMESTAMPS)
 --spec-draft-type-k, -ctkd, --cache-type-k-draft TYPE
                                         KV cache data type for K for the draft model
                                         allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1,
-                                        turbo2, turbo3, turbo4
+                                        turbo2, turbo3, turbo4, turbo3_tcq, turbo2_tcq
                                         (default: f16)
                                         (env: LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_K)
 --spec-draft-type-v, -ctvd, --cache-type-v-draft TYPE
                                         KV cache data type for V for the draft model
                                         allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1,
-                                        turbo2, turbo3, turbo4
+                                        turbo2, turbo3, turbo4, turbo3_tcq, turbo2_tcq
                                         (default: f16)
                                         (env: LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_V)
 
@@ -313,7 +316,7 @@
                                         --cpu-strict)
 --spec-draft-prio, --prio-draft N       set draft process/thread priority : 0-normal, 1-medium, 2-high,
                                         3-realtime (default: 0)
---spec-draft-poll, --poll-draft <0|1>   Use polling to wait for draft model work (default: same as --poll)
+--spec-draft-poll, --poll-draft <0|1>   Use polling to wait for draft model work (default: same as --poll])
 --spec-draft-cpu-mask-batch, -Cbd, --cpu-mask-batch-draft M
                                         Draft model CPU affinity mask. Complements cpu-range-draft (default:
                                         same as --cpu-mask)
@@ -324,6 +327,63 @@
                                         3-realtime (default: 0)
 --spec-draft-poll-batch, --poll-batch-draft <0|1>
                                         Use polling to wait for draft model work (default: --poll-draft)
+--spec-branch-budget N                  DDTree branch nodes beyond the main draft path (default: 0, 0 = flat)
+                                        (env: LLAMA_ARG_SPEC_BRANCH_BUDGET)
+--spec-dflash-max-slots N               max concurrent server slots with DFlash state; higher slots fall back
+                                        to non-speculative decode (default: 1)
+                                        (env: LLAMA_ARG_SPEC_DFLASH_MAX_SLOTS)
+--spec-dflash-cross-ctx N               DFlash cross-attention window in tokens; how many target hidden states
+                                        the drafter sees (default: 512)
+                                        (env: LLAMA_ARG_SPEC_DFLASH_CROSS_CTX)
+--spec-draft-top-k, --draft-topk N      top-K candidates per drafter position for tree branching (default: 1)
+                                        (env: LLAMA_ARG_SPEC_DRAFT_TOP_K)
+--spec-draft-temp T                     drafter sampling temperature for Gumbel sampling (default: 0.0, 0 =
+                                        greedy, >0 = Gumbel, auto = mirror target)
+                                        (env: LLAMA_ARG_SPEC_DRAFT_TEMP)
+--spec-dm-adaptive, --no-spec-dm-adaptive
+                                        enable adaptive draft-max controller (default: true)
+                                        (env: LLAMA_ARG_SPEC_DM_ADAPTIVE)
+--spec-dm-fringe-min F                  fringe controller only: rate below which DFlash is disabled after
+                                        off-dwell (default: 0.30)
+                                        (env: LLAMA_ARG_SPEC_DM_FRINGE_MIN)
+--spec-dm-fringe-max F                  fringe controller only: rate above which full base_n_max is used
+                                        (default: 0.50)
+                                        (env: LLAMA_ARG_SPEC_DM_FRINGE_MAX)
+--spec-dm-off-dwell N                   consecutive weak spec cycles before DFlash is disabled (default: 8)
+                                        (env: LLAMA_ARG_SPEC_DM_OFF_DWELL)
+--spec-dm-explore-interval N            draft at an exploratory depth every N spec cycles (default: 12)
+                                        (env: LLAMA_ARG_SPEC_DM_EXPLORE_INTERVAL)
+--spec-dm-min-reach N                   fringe controller only: min current-epoch samples at target position
+                                        before promotion (default: 3)
+                                        (env: LLAMA_ARG_SPEC_DM_MIN_REACH)
+--spec-dm-probe-interval N              cycles to wait before probing with n_max>0 when DM is disabled
+                                        (default: 16)
+                                        (env: LLAMA_ARG_SPEC_DM_PROBE_INTERVAL)
+--spec-dm-probe-fraction F              fraction of base n_max to use when probing from disabled state
+                                        (default: 0.25)
+                                        (env: LLAMA_ARG_SPEC_DM_PROBE_FRACTION)
+--spec-dm-controller MODE               adaptive draft-max controller: fringe or profit (default: profit)
+                                        (env: LLAMA_ARG_SPEC_DM_CONTROLLER)
+--spec-dm-profit-min F                  minimum profit margin over no-spec baseline before disabling dwell
+                                        clears (default: 0.0500)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_MIN)
+--spec-dm-profit-raise-margin F         relative profit margin required to raise adaptive draft depth
+                                        (default: 0.0500)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_RAISE_MARGIN)
+--spec-dm-profit-lower-margin F         relative profit margin required to lower adaptive draft depth
+                                        (default: 0.0500)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_LOWER_MARGIN)
+--spec-dm-profit-ewma-alpha F           EWMA alpha for adaptive DM profit stats (default: 0.1500)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_EWMA_ALPHA)
+--spec-dm-profit-min-samples N          minimum samples before adaptive DM profit position/depth is ready
+                                        (default: 3)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_MIN_SAMPLES)
+--spec-dm-profit-warmup N               positive-depth warmup cycles after no-spec baseline seeding (default:
+                                        0, 0 = auto from --spec-dm-profit-min-samples)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_WARMUP)
+--spec-dm-profit-baseline-interval N    active profit-controller cycles between no-spec baseline reprobes
+                                        (default: 1024, 0 = disabled)
+                                        (env: LLAMA_ARG_SPEC_DM_PROFIT_BASELINE_INTERVAL)
 --spec-draft-override-tensor, -otd, --override-tensor-draft <tensor name pattern>=<buffer type>,...
                                         override tensor buffer type for draft model
 --spec-draft-cpu-moe, -cmoed, --cpu-moe-draft
@@ -342,8 +402,12 @@
 --spec-draft-p-split, --draft-p-split P
                                         speculative decoding split probability (default: 0.10)
                                         (env: LLAMA_ARG_SPEC_DRAFT_P_SPLIT)
---spec-draft-p-min, --draft-p-min P     minimum speculative decoding probability (greedy) (default: 0.75)
+--spec-draft-p-min, --draft-p-min P     minimum speculative decoding probability (default: 0.0000)
                                         (env: LLAMA_ARG_SPEC_DRAFT_P_MIN)
+--spec-draft-ctx-size, -cd, --ctx-size-draft N
+                                        size of the prompt context for the draft model (default: 0, 0 = loaded
+                                        from model)
+                                        (env: LLAMA_ARG_SPEC_DRAFT_CTX_SIZE)
 --spec-draft-device, -devd, --device-draft <dev1,dev2,..>
                                         comma-separated list of devices to use for offloading the draft model
                                         (none = don't offload)
@@ -355,9 +419,12 @@
 --spec-draft-model, -md, --model-draft FNAME
                                         draft model for speculative decoding (default: unused)
                                         (env: LLAMA_ARG_SPEC_DRAFT_MODEL)
---spec-type none,draft-simple,draft-eagle3,draft-mtp,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache
-                                        comma-separated list of types of speculative decoding to use (default:
-                                        none)
+--spec-draft-replace, --spec-replace TARGET DRAFT
+                                        translate the string in TARGET into DRAFT if the draft model and main
+                                        model are not compatible
+--spec-type [none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod|suffix|copyspec|recycle|dflash]
+                                        type of speculative decoding to use when no draft model is provided
+                                        (default: none)
 
                                         (env: LLAMA_ARG_SPEC_TYPE)
 --spec-ngram-mod-n-min N                minimum number of ngram tokens to use for ngram-based speculative
@@ -380,12 +447,6 @@
 --spec-ngram-map-k4v-size-m N           ngram size M for ngram-map-k4v speculative decoding, length of draft
                                         m-gram (default: 48)
 --spec-ngram-map-k4v-min-hits N         minimum hits for ngram-map-k4v speculative decoding (default: 1)
---draft, --draft-n, --draft-max N       the argument has been removed. use --spec-draft-n-max or
-                                        --spec-ngram-mod-n-max
-                                        (env: LLAMA_ARG_DRAFT_MAX)
---draft-min, --draft-n-min N            the argument has been removed. use --spec-draft-n-min or
-                                        --spec-ngram-mod-n-min
-                                        (env: LLAMA_ARG_DRAFT_MIN)
 --spec-ngram-size-n N                   the argument has been removed. use the respective
                                         --spec-ngram-*-size-n or --spec-ngram-mod-n-match
 --spec-ngram-size-m N                   the argument has been removed. use the respective
@@ -469,33 +530,23 @@
 --api-prefix PREFIX                     prefix path the server serves from, without the trailing slash
                                         (default: )
                                         (env: LLAMA_ARG_API_PREFIX)
---webui-config JSON                     [DEPRECATED: use --ui-config] JSON that provides default WebUI
-                                        settings (overrides WebUI defaults)
+--webui-config JSON                     JSON that provides default WebUI settings (overrides WebUI defaults)
                                         (env: LLAMA_ARG_WEBUI_CONFIG)
---ui-config JSON                        JSON that provides default UI settings (overrides UI defaults)
-                                        (env: LLAMA_ARG_UI_CONFIG)
---webui-config-file PATH                [DEPRECATED: use --ui-config-file] JSON file that provides default
-                                        WebUI settings (overrides WebUI defaults)
+--webui-config-file PATH                JSON file that provides default WebUI settings (overrides WebUI
+                                        defaults)
                                         (env: LLAMA_ARG_WEBUI_CONFIG_FILE)
---ui-config-file PATH                   JSON file that provides default UI settings (overrides UI defaults)
-                                        (env: LLAMA_ARG_UI_CONFIG_FILE)
 --webui-mcp-proxy, --no-webui-mcp-proxy
-                                        [DEPRECATED: use --ui-mcp-proxy/--no-ui-mcp-proxy] experimental:
-                                        whether to enable MCP CORS proxy
-                                        (env: LLAMA_ARG_WEBUI_MCP_PROXY)
---ui-mcp-proxy, --no-ui-mcp-proxy       experimental: whether to enable MCP CORS proxy - do not enable in
+                                        experimental: whether to enable MCP CORS proxy - do not enable in
                                         untrusted environments (default: disabled)
-                                        (env: LLAMA_ARG_UI_MCP_PROXY)
+                                        (env: LLAMA_ARG_WEBUI_MCP_PROXY)
 --tools TOOL1,TOOL2,...                 experimental: whether to enable built-in tools for AI agents - do not
                                         enable in untrusted environments (default: no tools)
                                         specify "all" to enable all tools
                                         available tools: read_file, file_glob_search, grep_search,
-                                        exec_shell_command, write_file, edit_file, apply_diff, get_datetime
+                                        exec_shell_command, write_file, edit_file, apply_diff
                                         (env: LLAMA_ARG_TOOLS)
---webui, --no-webui                     [DEPRECATED: use --ui/--no-ui] whether to enable the Web UI
+--webui, --no-webui                     whether to enable the Web UI (default: enabled)
                                         (env: LLAMA_ARG_WEBUI)
---ui,  --no-ui                          whether to enable the Web UI (default: enabled)
-                                        (env: LLAMA_ARG_UI)
 --embedding, --embeddings               restrict to only support embedding use case; use only with dedicated
                                         embedding models (default: disabled)
                                         (env: LLAMA_ARG_EMBEDDINGS)
@@ -562,6 +613,21 @@
 --reasoning-budget-message MESSAGE      message injected before the end-of-thinking tag when reasoning budget
                                         is exhausted (default: none)
                                         (env: LLAMA_ARG_THINK_BUDGET_MESSAGE)
+--reasoning-loop-guard MODE             reasoning loop guard mode: off, force-close, or stop (default:
+                                        force-close)
+                                        (env: LLAMA_ARG_REASONING_LOOP_GUARD)
+--reasoning-loop-min-tokens N           minimum hidden reasoning tokens before loop checks (default: 1024)
+                                        (env: LLAMA_ARG_REASONING_LOOP_MIN_TOKENS)
+--reasoning-loop-window N               token tail window for reasoning loop checks (default: 2048)
+                                        (env: LLAMA_ARG_REASONING_LOOP_WINDOW)
+--reasoning-loop-max-period N           maximum periodic loop length to check (default: 512)
+                                        (env: LLAMA_ARG_REASONING_LOOP_MAX_PERIOD)
+--reasoning-loop-min-coverage N         minimum repeated token coverage before loop trigger (default: 768)
+                                        (env: LLAMA_ARG_REASONING_LOOP_MIN_COVERAGE)
+--reasoning-loop-check-interval N       accepted-token interval between loop checks (default: 32)
+                                        (env: LLAMA_ARG_REASONING_LOOP_CHECK_INTERVAL)
+--reasoning-loop-interventions N        maximum force-close interventions before stop (default: 1)
+                                        (env: LLAMA_ARG_REASONING_LOOP_INTERVENTIONS)
 --chat-template JINJA_TEMPLATE          set custom jinja chat template (default: template taken from model's
                                         metadata)
                                         if suffix/prefix are specified, template will be disabled
@@ -614,6 +680,13 @@
                                         /lora-adapters) (default: disabled)
 --sleep-idle-seconds SECONDS            number of seconds of idleness after which the server will sleep
                                         (default: -1; -1 = disabled)
+--draft, --draft-n, --draft-max N       legacy alias for --spec-draft-n-max (default: 16)
+                                        (env: LLAMA_ARG_DRAFT_MAX)
+--draft-min, --draft-n-min N            legacy alias for --spec-draft-n-min (default: 0)
+                                        (env: LLAMA_ARG_DRAFT_MIN)
+--tree-budget N                         legacy total DDTree node budget; converted to
+                                        --spec-branch-budget=max(0, tree-budget - draft-max)
+                                        (env: LLAMA_ARG_TREE_BUDGET)
 -mv,   --model-vocoder FNAME            vocoder model for audio generation (default: unused)
 --tts-use-guide-tokens                  Use guide tokens to improve TTS word recall
 --embd-gemma-default                    use default EmbeddingGemma model (note: can download weights from the
@@ -635,3 +708,4 @@
 --vision-gemma-4b-default               use Gemma 3 4B QAT (note: can download weights from the internet)
 --vision-gemma-12b-default              use Gemma 3 12B QAT (note: can download weights from the internet)
 --spec-default                          enable default speculative decoding config
+--spec-dflash-default                   enable default DFlash speculative decoding config (requires -md)

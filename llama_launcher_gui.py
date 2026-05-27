@@ -180,6 +180,10 @@ class LlamaLauncherV6(ctk.CTk):
             path_frame, "模型选择:", self.model_name, [],
             extra_label="多模态:", extra_var=self.mmproj_name, extra_values=["(无)"], extra_width=150)
 
+        # Draft model selection row
+        self.draft_model_row = self.create_dir_input_row(path_frame, "推测模型:", self.spec_draft_model,
+                                                         browse_cmd=lambda: self.browse(self.spec_draft_model))
+
 
 
         param_tabs = ctk.CTkTabview(self.main_container)
@@ -223,12 +227,44 @@ class LlamaLauncherV6(ctk.CTk):
         self.create_small_input(row_adv, "并发量:", self.n_parallel, width=70)
         self.create_small_check(row_adv, "内存映射模型:", self.mmap)
         self.create_small_check(row_adv, "性能计时：", self.perf_timer, text="开启")
+        self.create_small_check(row_adv, "MoE模型：", self.is_moe, text="启用")
+
+        # 推测解码参数
+        spec_row = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        spec_row.pack(fill="x", padx=10, pady=2)
+        self.spec_type_dropdown = self.create_small_option(spec_row, "推测类型:", self.spec_type,
+                                 ["none", "draft-simple", "draft-eagle3", "draft-mtp",
+                                  "ngram-simple", "ngram-map-k", "ngram-map-k4v",
+                                  "ngram-mod", "ngram-cache",
+                                  "suffix", "copyspec", "recycle", "dflash"],
+                                 command=self.on_spec_type_changed)
+        self.spec_sub_frame = ctk.CTkFrame(spec_row, fg_color="transparent")
+        self.spec_sub_frame.pack(side="left")
+        ctk.CTkLabel(self.spec_sub_frame, text="推测Token数:").pack(side="left", padx=(5, 2))
+        self.spec_nmax_entry = ctk.CTkEntry(self.spec_sub_frame, textvariable=self.spec_draft_n_max, width=60)
+        self.spec_nmax_entry.pack(side="left", padx=5)
+
+        # DFlash专用参数 (仅选dflash时显示)
+        self.dflash_frame = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        self.create_small_input(self.dflash_frame, "DFlash槽位数:", self.spec_dflash_max_slots, width=60)
+        self.create_small_input(self.dflash_frame, "交叉上下文:", self.spec_dflash_cross_ctx, width=70)
+        self.create_small_input(self.dflash_frame, "Draft Top-K:", self.spec_draft_top_k, width=60)
+        self.create_small_input(self.dflash_frame, "Draft温度:", self.spec_draft_temp, width=60)
+        self.create_small_check(self.dflash_frame, "默认配置:", self.spec_dflash_default, text="启用")
+
+        # MoE模型专属参数 (仅MoE模型时显示)
+        self.moe_frame = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        self.create_small_check(self.moe_frame, "CPU常驻MoE层:", self.cpu_moe, text="启用")
+        self.create_small_input(self.moe_frame, "前N层CPU:", self.n_cpu_moe, width=60)
 
         # 额外参数输入框（独占一行，填满宽度）
-        f = ctk.CTkFrame(tab_adv, fg_color="transparent")
-        f.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(f, text="额外参数:", width=90, anchor="w").pack(side="left")
-        ctk.CTkEntry(f, textvariable=self.extra_args).pack(side="left", fill="x", expand=True, padx=(5, 5))
+        self.extra_args_frame = ctk.CTkFrame(tab_adv, fg_color="transparent")
+        self.extra_args_frame.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(self.extra_args_frame, text="额外参数:", width=90, anchor="w").pack(side="left")
+        ctk.CTkEntry(self.extra_args_frame, textvariable=self.extra_args).pack(side="left", fill="x", expand=True, padx=(5, 5))
+
+        self.on_spec_type_changed("none")
+        self.is_moe.trace_add("write", lambda *a: self.toggle_moe_frame())
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -284,6 +320,10 @@ class LlamaLauncherV6(ctk.CTk):
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index, self.n_parallel,
             self.perf_timer, self.mmap, self.flash_attn, self.split_mode,
+            self.spec_type, self.spec_draft_model, self.spec_draft_n_max,
+            self.spec_dflash_max_slots, self.spec_dflash_cross_ctx,
+            self.spec_draft_top_k, self.spec_draft_temp, self.spec_dflash_default,
+            self.cpu_moe, self.n_cpu_moe, self.is_moe,
             self.extra_args
         ]
         for var in vars_to_track:
@@ -377,6 +417,34 @@ class LlamaLauncherV6(ctk.CTk):
         mmproj_full = self.get_full_mmproj_path()
         if mmproj_full:
             cmd.extend(["--mmproj", quote(mmproj_full)])
+
+        if self.spec_type.get() and self.spec_type.get() != "none":
+            cmd.extend(["--spec-type", self.spec_type.get()])
+
+            if self.spec_type.get() != "draft-mtp":
+                spec_draft = self.spec_draft_model.get().strip()
+                if spec_draft:
+                    cmd.extend(["--spec-draft-model", quote(spec_draft)])
+
+            if self.spec_draft_n_max.get():
+                cmd.extend(["--spec-draft-n-max", self.spec_draft_n_max.get()])
+
+            if self.spec_type.get() == "dflash":
+                if self.spec_dflash_max_slots.get():
+                    cmd.extend(["--spec-dflash-max-slots", self.spec_dflash_max_slots.get()])
+                if self.spec_dflash_cross_ctx.get():
+                    cmd.extend(["--spec-dflash-cross-ctx", self.spec_dflash_cross_ctx.get()])
+                if self.spec_draft_top_k.get():
+                    cmd.extend(["--spec-draft-top-k", self.spec_draft_top_k.get()])
+                if self.spec_draft_temp.get():
+                    cmd.extend(["--spec-draft-temp", self.spec_draft_temp.get()])
+                if self.spec_dflash_default.get() == "on":
+                    cmd.append("--spec-dflash-default")
+
+        if self.cpu_moe.get() == "on":
+            cmd.append("--cpu-moe")
+        if self.n_cpu_moe.get():
+            cmd.extend(["--n-cpu-moe", self.n_cpu_moe.get()])
 
         extra = self.extra_args.get().strip()
         if extra:
@@ -546,11 +614,22 @@ class LlamaLauncherV6(ctk.CTk):
         self.flash_attn = ctk.StringVar(value="auto")
         self.split_mode = ctk.StringVar(value="layer")
         self.perf_timer = ctk.StringVar(value="off")
+        self.is_moe = ctk.StringVar(value="off")
         self.mmap = ctk.StringVar(value="on")
         self.ctx_preset = ctk.StringVar(value="自定义")
         self.reasoning = ctk.StringVar(value="off")
         self.cache_type_options = ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"]
         self.n_parallel = ctk.StringVar(value="-1")
+        self.spec_type = ctk.StringVar(value="none")
+        self.spec_draft_model = ctk.StringVar()
+        self.spec_draft_n_max = ctk.StringVar(value="16")
+        self.spec_dflash_max_slots = ctk.StringVar(value="1")
+        self.spec_dflash_cross_ctx = ctk.StringVar(value="512")
+        self.spec_draft_top_k = ctk.StringVar(value="1")
+        self.spec_draft_temp = ctk.StringVar(value="0.0")
+        self.spec_dflash_default = ctk.StringVar(value="off")
+        self.cpu_moe = ctk.StringVar(value="off")
+        self.n_cpu_moe = ctk.StringVar(value="")
         self.extra_args = ctk.StringVar()
         self.ts_final_str = ctk.StringVar(value="1")
 
@@ -569,9 +648,17 @@ class LlamaLauncherV6(ctk.CTk):
             "ctx": self.ctx_custom, "ts_ratio": self.ts_main_val,
             "cache_type_k": self.kv_quant_k, "cache_type_v": self.kv_quant_v,
             "mmap": self.mmap,
-            "perf_timer": self.perf_timer, "flash_attn": self.flash_attn,
+            "perf_timer": self.perf_timer, "is_moe": self.is_moe, "flash_attn": self.flash_attn,
             "split_mode": self.split_mode, "reasoning": self.reasoning,
             "gpu_selection": self.gpu_selection, "n_parallel": self.n_parallel,
+            "spec_type": self.spec_type, "spec_draft_model": self.spec_draft_model,
+            "spec_draft_n_max": self.spec_draft_n_max,
+            "spec_dflash_max_slots": self.spec_dflash_max_slots,
+            "spec_dflash_cross_ctx": self.spec_dflash_cross_ctx,
+            "spec_draft_top_k": self.spec_draft_top_k,
+            "spec_draft_temp": self.spec_draft_temp,
+            "spec_dflash_default": self.spec_dflash_default,
+            "cpu_moe": self.cpu_moe, "n_cpu_moe": self.n_cpu_moe,
             "extra_args": self.extra_args,
         }
 
@@ -598,6 +685,8 @@ class LlamaLauncherV6(ctk.CTk):
                 elif str_val and key == "mmap":
                     var.set("on" if str_val in ("on", "1") else "off")
                 elif str_val and key == "reasoning":
+                    var.set("on" if str_val in ("on", "1") else "off")
+                elif str_val and key == "is_moe":
                     var.set("on" if str_val in ("on", "1") else "off")
                 elif str_val is not None:
                     var.set(str_val)
@@ -682,6 +771,36 @@ class LlamaLauncherV6(ctk.CTk):
         else: self.main_gpu_dropdown.configure(state="normal")
         self.auto_calc_ts()
 
+    def on_spec_type_changed(self, choice):
+        if choice == "none":
+            self.spec_sub_frame.pack_forget()
+            self.draft_model_row.pack_forget()
+        else:
+            self.spec_sub_frame.pack(side="left")
+            if choice == "draft-mtp":
+                self.draft_model_row.pack_forget()
+            else:
+                try:
+                    self.draft_model_row.pack(fill="x", padx=10, pady=2, before=self.draft_model_row.master.winfo_children()[-1])
+                except:
+                    self.draft_model_row.pack(fill="x", padx=10, pady=2)
+        if choice == "dflash":
+            try:
+                self.dflash_frame.pack(fill="x", padx=10, pady=2, before=self.extra_args_frame)
+            except:
+                pass
+        else:
+            self.dflash_frame.pack_forget()
+
+    def toggle_moe_frame(self):
+        if self.is_moe.get() == "on":
+            try:
+                self.moe_frame.pack(fill="x", padx=10, pady=2, before=self.extra_args_frame)
+            except:
+                pass
+        else:
+            self.moe_frame.pack_forget()
+
     def auto_calc_ts(self, _=None):
         sel = self.gpu_selection.get()
         try: main_v = int(self.ts_main_val.get())
@@ -702,7 +821,7 @@ class LlamaLauncherV6(ctk.CTk):
 
     def create_dir_input_row(self, parent, label, var, browse_cmd=None, extra_btn=None, extra_cmd=None):
         f = ctk.CTkFrame(parent, fg_color="transparent"); f.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(f, text=label, width=90, anchor="w").pack(side="left")
+        ctk.CTkLabel(f, text=label, width=90, anchor="w").pack(side="left", padx=(5, 2))
         ctk.CTkEntry(f, textvariable=var).pack(side="left", fill="x", expand=True, padx=(5, 5))
         if browse_cmd:
             ctk.CTkButton(f, text="...", width=40, command=browse_cmd).pack(side="right", padx=(0, 5))

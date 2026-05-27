@@ -22,16 +22,26 @@
 ### 模型目录浏览
 - **主模型**：设置目录后一键刷新，自动列出所有 GGUF 文件
 - **多模态投影器 (mmproj)**：自动识别 `mmproj-*` 文件
+- **推测模型**：独立选择推测解码用 Draft 模型路径
 
 ### 分 Tab 参数配置
 | Tab | 包含参数 |
 |-----|---------|
 | **API/基础** | 地址、端口、上下文长度（预设+自定义）、思考模式 |
 | **GPU/加速** | 运行设备、主卡编号、GPU层数(--gpu-layers)、拆分模式(--split-mode)、Flash Attention、TS配比 |
-| **高级** | KV量化类型(K/V独立)、内存映射、性能计时、额外参数 |
+| **高级** | KV量化类型(K/V独立)、并发量、内存映射、性能计时、MoE模型开关、推测解码参数、DFlash参数、额外参数 |
 
 ### KV 缓存量化支持
 f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1（K/V 独立设置）
+
+### 推测解码 (Speculative Decoding)
+- 推测类型(`--spec-type`)：支持 none / draft-simple / draft-eagle3 / draft-mtp / ngram-simple / ngram-map-k / ngram-map-k4v / ngram-mod / ngram-cache / suffix / copyspec / recycle / dflash
+- 推测Token数(`--spec-draft-n-max`)与推测模型(`--spec-draft-model`)联动
+- 选 dflash 时显示 DFlash 专属参数：DFlash槽位数、交叉上下文、Draft Top-K、Draft温度、默认配置
+
+### MoE 模型支持
+- 通过勾选框手动标记模型是否为 MoE
+- 启用后显示专属参数：CPU常驻MoE层(`--cpu-moe`)、前N层CPU(`--n-cpu-moe N`)
 
 ### 实时日志与统计
 - Token 数量、生成速率 (tokens/s)、上下文占用百分比
@@ -72,9 +82,20 @@ MyModel:
   cache_type_v: "q8_0"
   mmap: "on"
   perf_timer: "off"
+  is_moe: "off"
   flash_attn: "auto"
   split_mode: "layer"
   reasoning: "off"
+  spec_type: "none"
+  spec_draft_model: ""
+  spec_draft_n_max: "16"
+  spec_dflash_max_slots: "1"
+  spec_dflash_cross_ctx: "512"
+  spec_draft_top_k: "1"
+  spec_draft_temp: "0.0"
+  spec_dflash_default: "off"
+  cpu_moe: "off"
+  n_cpu_moe: ""
   extra_args: ""
   gpu_selection: "0: NVIDIA GeForce RTX 4070 SUPER"
 ```
