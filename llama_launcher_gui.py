@@ -209,14 +209,18 @@ class LlamaLauncherV6(ctk.CTk):
         gpu_opts = [f"{g['index']}: {g['name']}" for g in self.available_gpus]
         if len(self.available_gpus) > 1: gpu_opts.append("所有显卡 (并行)")
         self.gpu_dropdown = self.create_small_option(row_gpu, "运行设备:", self.gpu_selection, gpu_opts, command=self.sync_main_gpu)
-        self.main_gpu_dropdown = self.create_small_option(row_gpu, "主卡编号:", self.main_gpu_index,
-                                                          [str(g['index']) for g in self.available_gpus])
+
         self.create_small_input(row_gpu, "GPU卸载层数:", self.ngl)
-        self.create_small_option(row_gpu, "拆分模式:", self.split_mode, ["layer", "none", "row"], width=60)
-        self.create_small_input(row_gpu, "主卡配比:", self.ts_main_val)
-        self.ts_display = ctk.CTkLabel(row_gpu, text="-> TS: --", text_color="#3498db")
+        self.flash_attn_dropdown = self.create_small_option(row_gpu, "Flash Attention:", self.flash_attn, ["auto", "on", "off"], width=60)
+
+        # 多卡并行相关控件 (单卡时隐藏，显示在下一行)
+        self.multi_gpu_frame = ctk.CTkFrame(tab_gpu, fg_color="transparent")
+        self.main_gpu_dropdown = self.create_small_option(self.multi_gpu_frame, "主卡编号:", self.main_gpu_index,
+                                                          [str(g['index']) for g in self.available_gpus])
+        self.create_small_option(self.multi_gpu_frame, "拆分模式:", self.split_mode, ["layer", "none", "row"], width=60)
+        self.create_small_input(self.multi_gpu_frame, "主卡配比:", self.ts_main_val)
+        self.ts_display = ctk.CTkLabel(self.multi_gpu_frame, text="-> TS: --", text_color="#3498db")
         self.ts_display.pack(side="left", padx=10)
-        self.create_small_option(row_gpu, "Flash Attention:", self.flash_attn, ["auto", "on", "off"], width=60)
 
         # Tab 3: 高级
         tab_adv = param_tabs.add("高级")
@@ -384,20 +388,28 @@ class LlamaLauncherV6(ctk.CTk):
         mg_idx = self.main_gpu_index.get() if self.main_gpu_index.get() else "0"
         quote = lambda s: f'"{s}"' if for_display else s
 
+        sel = self.gpu_selection.get()
+        is_parallel = "所有显卡" in sel
+
         cmd = [
             quote(self.server_path.get()),
             "--host", self.host.get(),
             "--port", self.port.get(),
             "--model", quote(self.get_full_model_path()),
             "--gpu-layers", self.ngl.get(),
-            "--main-gpu", mg_idx,
+        ]
+        if is_parallel:
+            cmd.extend([
+                "--main-gpu", mg_idx,
+                "--tensor-split", self.ts_final_str.get(),
+                "--split-mode", self.split_mode.get(),
+            ])
+        cmd.extend([
             "--ctx-size", self.ctx_custom.get(),
-            "--tensor-split", self.ts_final_str.get(),
-            "--split-mode", self.split_mode.get(),
             "--cache-type-k", self.kv_quant_k.get(),
             "--cache-type-v", self.kv_quant_v.get(),
             "--parallel", self.n_parallel.get(),
-        ]
+        ])
         if self.reasoning.get() == "on":
             cmd.extend(["--reasoning", "on"])
         else:
@@ -458,6 +470,9 @@ class LlamaLauncherV6(ctk.CTk):
     def update_cmd_preview(self):
         """更新命令行预览显示"""
         cmd_str = self.build_command_list(for_display=True)
+        sel = self.gpu_selection.get()
+        if "所有显卡" not in sel and "CPU" not in sel:
+            cmd_str = f'set CUDA_VISIBLE_DEVICES={sel.split(":")[0]} && ' + cmd_str
         self.cmd_display.configure(state="normal")
         self.cmd_display.delete("1.0", "end")
         self.cmd_display.insert("1.0", cmd_str)
@@ -549,8 +564,13 @@ class LlamaLauncherV6(ctk.CTk):
 
         cmd = self.build_command_list(for_display=False)
 
+        env = os.environ.copy()
+        sel = self.gpu_selection.get()
+        if "所有显卡" not in sel:
+            env["CUDA_VISIBLE_DEVICES"] = sel.split(":")[0]
+
         def run():
-            self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding='utf-8', errors='replace', creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+            self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding='utf-8', errors='replace', creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW, env=env)
             self.running = True
             for line in iter(self.process.stdout.readline, ""):
                 self.log_queue.put(line)
@@ -767,8 +787,12 @@ class LlamaLauncherV6(ctk.CTk):
 
     def sync_main_gpu(self, choice):
         if "所有显卡" not in choice:
-            idx = choice.split(":")[0]; self.main_gpu_index.set(idx); self.main_gpu_dropdown.configure(state="disabled")
-        else: self.main_gpu_dropdown.configure(state="normal")
+            idx = choice.split(":")[0]; self.main_gpu_index.set(idx)
+            self.main_gpu_dropdown.configure(state="disabled")
+            self.multi_gpu_frame.pack_forget()
+        else:
+            self.multi_gpu_frame.pack(fill="x", padx=10, pady=5)
+            self.main_gpu_dropdown.configure(state="normal")
         self.auto_calc_ts()
 
     def on_spec_type_changed(self, choice):
