@@ -15,7 +15,7 @@ Qwen3.6-27B:
   flash_attn: 'on'
   split_mode: layer
   reasoning: 'on'
-  gpu_selection: '0: NVIDIA GeForce RTX 4070 SUPER'
+  gpu_selection: '0: NVIDIA GeForce RTX 4080 SUPER'
   extra_args: "--temp 1.0 --top-p 0.95 --top-k\n    20 --min-p 0.0 --presence_penalty\
     \ 1.5 --repeat-penalty 1.0"
   cache_type_options:
@@ -40,6 +40,9 @@ Qwen3.6-27B:
   spec_draft_top_k: '1'
   spec_draft_temp: '0.0'
   spec_dflash_default: 'off'
+  is_moe: 'off'
+  cpu_moe: 'off'
+  n_cpu_moe: ''
 Qwen3.6-27B-MTP:
   server_path: D:/Program Files/llama/turboquant/llama-server.exe
   model_dir: F:/GGUF_models/unsloth/Qwen3.6-27B-MTP-GGUF
@@ -57,7 +60,7 @@ Qwen3.6-27B-MTP:
   flash_attn: 'on'
   split_mode: layer
   reasoning: 'off'
-  gpu_selection: '0: NVIDIA GeForce RTX 4070 SUPER'
+  gpu_selection: '0: NVIDIA GeForce RTX 4080 SUPER'
   extra_args: --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0 --presence_penalty 1.5
     --repeat-penalty 1.0
   cache_type_options:
@@ -84,6 +87,7 @@ Qwen3.6-27B-MTP:
   spec_dflash_default: 'off'
   cpu_moe: 'off'
   n_cpu_moe: ''
+  is_moe: 'off'
 Qwen3.6-35B-A3B:
   server_path: D:/Program Files/llama/turboquant/llama-server.exe
   model_dir: F:/GGUF_models/unsloth/Qwen3.6-35B-A3B-GGUF
@@ -101,7 +105,7 @@ Qwen3.6-35B-A3B:
   flash_attn: 'on'
   split_mode: layer
   reasoning: 'off'
-  gpu_selection: '0: NVIDIA GeForce RTX 4070 SUPER'
+  gpu_selection: '0: NVIDIA GeForce RTX 4080 SUPER'
   n_parallel: '1'
   spec_type: none
   spec_draft_model: F:/GGUF_models/Anbeeld/Qwen3.6-27B-DFlash-GGUF/Qwen3.6-27B-DFlash-Q4_K_M.gguf
@@ -127,3 +131,4 @@ Qwen3.6-35B-A3B:
   - turbo2
   - turbo3
   - turbo4
+  is_moe: 'off'

@@ -117,12 +117,41 @@ class LlamaLauncherV6(ctk.CTk):
     def get_system_gpus(self):
         gpus = []
         if HAS_NVML:
+            nvml_by_name = {}
             for i in range(pynvml.nvmlDeviceGetCount()):
                 h = pynvml.nvmlDeviceGetHandleByIndex(i)
-                # 兼容处理显卡名称字节转字符串
                 name = pynvml.nvmlDeviceGetName(h)
                 if isinstance(name, bytes): name = name.decode('utf-8')
-                gpus.append({"index": i, "name": name})
+                nvml_by_name[name] = i
+
+            # 尝试用 WMI 获取 Windows 显示适配器顺序（与任务管理器一致）
+            try:
+                result = subprocess.run(
+                    ["wmic", "path", "win32_videocontroller", "get", "name"],
+                    capture_output=True, text=True, timeout=5
+                )
+                lines = result.stdout.strip().split("\n")[1:]
+                used = set()
+                for line in lines:
+                    wmi_name = line.strip()
+                    if not wmi_name:
+                        continue
+                    if wmi_name in nvml_by_name:
+                        idx = nvml_by_name[wmi_name]
+                        gpus.append({"index": len(gpus), "name": wmi_name, "nvml_idx": idx})
+                        used.add(wmi_name)
+                    else:
+                        for nvml_name, nvml_idx in nvml_by_name.items():
+                            if nvml_name not in used and (nvml_name in wmi_name or wmi_name in nvml_name):
+                                gpus.append({"index": len(gpus), "name": nvml_name, "nvml_idx": nvml_idx})
+                                used.add(nvml_name)
+                                break
+            except:
+                pass
+
+            for name, nvml_idx in nvml_by_name.items():
+                if name not in {g["name"] for g in gpus}:
+                    gpus.append({"index": len(gpus), "name": name, "nvml_idx": nvml_idx})
         return gpus
 
     def setup_ui(self):
@@ -250,11 +279,13 @@ class LlamaLauncherV6(ctk.CTk):
 
         # DFlash专用参数 (仅选dflash时显示)
         self.dflash_frame = ctk.CTkFrame(tab_adv, fg_color="transparent")
-        self.create_small_input(self.dflash_frame, "DFlash槽位数:", self.spec_dflash_max_slots, width=60)
-        self.create_small_input(self.dflash_frame, "交叉上下文:", self.spec_dflash_cross_ctx, width=70)
-        self.create_small_input(self.dflash_frame, "Draft Top-K:", self.spec_draft_top_k, width=60)
-        self.create_small_input(self.dflash_frame, "Draft温度:", self.spec_draft_temp, width=60)
         self.create_small_check(self.dflash_frame, "默认配置:", self.spec_dflash_default, text="启用")
+        self.dflash_params_frame = ctk.CTkFrame(self.dflash_frame, fg_color="transparent")
+        self.create_small_input(self.dflash_params_frame, "DFlash槽位数:", self.spec_dflash_max_slots, width=60)
+        self.create_small_input(self.dflash_params_frame, "交叉上下文:", self.spec_dflash_cross_ctx, width=70)
+        self.create_small_input(self.dflash_params_frame, "Draft Top-K:", self.spec_draft_top_k, width=60)
+        self.create_small_input(self.dflash_params_frame, "Draft温度:", self.spec_draft_temp, width=60)
+        self.dflash_params_frame.pack(side="left")
 
         # MoE模型专属参数 (仅MoE模型时显示)
         self.moe_frame = ctk.CTkFrame(tab_adv, fg_color="transparent")
@@ -267,8 +298,11 @@ class LlamaLauncherV6(ctk.CTk):
         ctk.CTkLabel(self.extra_args_frame, text="额外参数:", width=90, anchor="w").pack(side="left")
         ctk.CTkEntry(self.extra_args_frame, textvariable=self.extra_args).pack(side="left", fill="x", expand=True, padx=(5, 5))
 
-        self.on_spec_type_changed("none")
+        self.on_spec_type_changed(self.spec_type.get())
         self.is_moe.trace_add("write", lambda *a: self.toggle_moe_frame())
+        self.spec_dflash_default.trace_add("write", lambda *a: self.toggle_dflash_params())
+        self.toggle_moe_frame()
+        self.toggle_dflash_params()
 
         # 命令预览 和 日志区
         log_box = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -442,16 +476,17 @@ class LlamaLauncherV6(ctk.CTk):
                 cmd.extend(["--spec-draft-n-max", self.spec_draft_n_max.get()])
 
             if self.spec_type.get() == "dflash":
-                if self.spec_dflash_max_slots.get():
-                    cmd.extend(["--spec-dflash-max-slots", self.spec_dflash_max_slots.get()])
-                if self.spec_dflash_cross_ctx.get():
-                    cmd.extend(["--spec-dflash-cross-ctx", self.spec_dflash_cross_ctx.get()])
-                if self.spec_draft_top_k.get():
-                    cmd.extend(["--spec-draft-top-k", self.spec_draft_top_k.get()])
-                if self.spec_draft_temp.get():
-                    cmd.extend(["--spec-draft-temp", self.spec_draft_temp.get()])
                 if self.spec_dflash_default.get() == "on":
                     cmd.append("--spec-dflash-default")
+                else:
+                    if self.spec_dflash_max_slots.get():
+                        cmd.extend(["--spec-dflash-max-slots", self.spec_dflash_max_slots.get()])
+                    if self.spec_dflash_cross_ctx.get():
+                        cmd.extend(["--spec-dflash-cross-ctx", self.spec_dflash_cross_ctx.get()])
+                    if self.spec_draft_top_k.get():
+                        cmd.extend(["--spec-draft-top-k", self.spec_draft_top_k.get()])
+                    if self.spec_draft_temp.get():
+                        cmd.extend(["--spec-draft-temp", self.spec_draft_temp.get()])
 
         if self.cpu_moe.get() == "on":
             cmd.append("--cpu-moe")
@@ -504,7 +539,7 @@ class LlamaLauncherV6(ctk.CTk):
                     # GPU 详细监控 (添加显卡名称显示)
                     if HAS_NVML:
                         for i, gpu_info in enumerate(self.available_gpus):
-                            h = pynvml.nvmlDeviceGetHandleByIndex(i)
+                            h = pynvml.nvmlDeviceGetHandleByIndex(gpu_info['nvml_idx'])
                             name = gpu_info['name'] # 获取初始化时记录的显卡名称
 
                             info = pynvml.nvmlDeviceGetMemoryInfo(h)
@@ -719,6 +754,8 @@ class LlamaLauncherV6(ctk.CTk):
         if hasattr(self, 'model_dropdown'):
             self.refresh_models()
             self.sync_main_gpu(self.gpu_selection.get())
+            self.on_spec_type_changed(self.spec_type.get())
+            self.toggle_moe_frame()
 
     def on_profile_selected(self, _=None):
         name = self.current_profile.get()
@@ -813,6 +850,7 @@ class LlamaLauncherV6(ctk.CTk):
                 self.dflash_frame.pack(fill="x", padx=10, pady=2, before=self.extra_args_frame)
             except:
                 pass
+            self.toggle_dflash_params()
         else:
             self.dflash_frame.pack_forget()
 
@@ -824,6 +862,12 @@ class LlamaLauncherV6(ctk.CTk):
                 pass
         else:
             self.moe_frame.pack_forget()
+
+    def toggle_dflash_params(self):
+        if self.spec_dflash_default.get() == "on":
+            self.dflash_params_frame.pack_forget()
+        else:
+            self.dflash_params_frame.pack(side="left")
 
     def auto_calc_ts(self, _=None):
         sel = self.gpu_selection.get()
