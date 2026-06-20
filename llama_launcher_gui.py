@@ -209,6 +209,11 @@ class LlamaLauncherV6(ctk.CTk):
             path_frame, "模型选择:", self.model_name, [],
             extra_label="多模态:", extra_var=self.mmproj_name, extra_values=["(无)"], extra_width=150)
 
+        # Draft model for draft-mtp (separate file, like 推测模型)
+        self.draft_mtp_row = self.create_dir_input_row(path_frame, "草稿模型:", self.draft_model,
+                                                        browse_cmd=lambda: self.browse(self.draft_model))
+        self.draft_mtp_row.pack_forget()
+
         # Draft model selection row
         self.draft_model_row = self.create_dir_input_row(path_frame, "推测模型:", self.spec_draft_model,
                                                          browse_cmd=lambda: self.browse(self.spec_draft_model))
@@ -358,7 +363,7 @@ class LlamaLauncherV6(ctk.CTk):
             self.ts_final_str, self.kv_quant_k, self.kv_quant_v, self.reasoning,
             self.gpu_selection, self.main_gpu_index, self.n_parallel,
             self.perf_timer, self.mmap, self.flash_attn, self.split_mode,
-            self.spec_type, self.spec_draft_model, self.spec_draft_n_max,
+            self.spec_type, self.spec_draft_model, self.draft_model, self.spec_draft_n_max,
             self.spec_dflash_max_slots, self.spec_dflash_cross_ctx,
             self.spec_draft_top_k, self.spec_draft_temp, self.spec_dflash_default,
             self.cpu_moe, self.n_cpu_moe, self.is_moe,
@@ -471,6 +476,10 @@ class LlamaLauncherV6(ctk.CTk):
                 spec_draft = self.spec_draft_model.get().strip()
                 if spec_draft:
                     cmd.extend(["--spec-draft-model", quote(spec_draft)])
+            else:
+                mtp_draft = self.draft_model.get().strip()
+                if mtp_draft:
+                    cmd.extend(["--model-draft", quote(mtp_draft)])
 
             if self.spec_draft_n_max.get():
                 cmd.extend(["--spec-draft-n-max", self.spec_draft_n_max.get()])
@@ -677,6 +686,7 @@ class LlamaLauncherV6(ctk.CTk):
         self.n_parallel = ctk.StringVar(value="-1")
         self.spec_type = ctk.StringVar(value="none")
         self.spec_draft_model = ctk.StringVar()
+        self.draft_model = ctk.StringVar()
         self.spec_draft_n_max = ctk.StringVar(value="16")
         self.spec_dflash_max_slots = ctk.StringVar(value="1")
         self.spec_dflash_cross_ctx = ctk.StringVar(value="512")
@@ -707,6 +717,7 @@ class LlamaLauncherV6(ctk.CTk):
             "split_mode": self.split_mode, "reasoning": self.reasoning,
             "gpu_selection": self.gpu_selection, "n_parallel": self.n_parallel,
             "spec_type": self.spec_type, "spec_draft_model": self.spec_draft_model,
+            "draft_model": self.draft_model,
             "spec_draft_n_max": self.spec_draft_n_max,
             "spec_dflash_max_slots": self.spec_dflash_max_slots,
             "spec_dflash_cross_ctx": self.spec_dflash_cross_ctx,
@@ -745,6 +756,8 @@ class LlamaLauncherV6(ctk.CTk):
                     var.set("on" if str_val in ("on", "1") else "off")
                 elif str_val is not None:
                     var.set(str_val)
+            elif key == "draft_model":
+                var.set("")
         cache_opts = cfg.get("cache_type_options")
         if isinstance(cache_opts, list):
             self.cache_type_options = cache_opts
@@ -836,11 +849,14 @@ class LlamaLauncherV6(ctk.CTk):
         if choice == "none":
             self.spec_sub_frame.pack_forget()
             self.draft_model_row.pack_forget()
+            self.draft_mtp_row.pack_forget()
         else:
             self.spec_sub_frame.pack(side="left")
             if choice == "draft-mtp":
                 self.draft_model_row.pack_forget()
+                self.draft_mtp_row.pack(fill="x", padx=10, pady=2)
             else:
+                self.draft_mtp_row.pack_forget()
                 try:
                     self.draft_model_row.pack(fill="x", padx=10, pady=2, before=self.draft_model_row.master.winfo_children()[-1])
                 except:
