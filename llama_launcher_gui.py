@@ -2,6 +2,7 @@ import os
 import sys
 import atexit
 import ctypes
+from ctypes import wintypes
 import subprocess
 import threading
 import time
@@ -124,18 +125,64 @@ class LlamaLauncherV6(ctk.CTk):
                 if isinstance(name, bytes): name = name.decode('utf-8')
                 nvml_by_name[name] = i
 
-            # 尝试用 WMI 获取 Windows 显示适配器顺序（与任务管理器一致）
+            # 用 Windows SetupAPI 获取显示适配器顺序（与设备管理器/任务管理器一致）
             try:
-                result = subprocess.run(
-                    ["wmic", "path", "win32_videocontroller", "get", "name"],
-                    capture_output=True, text=True, timeout=5
+                setupapi = ctypes.windll.setupapi
+                setupapi.SetupDiGetClassDevsW.restype = ctypes.c_void_p
+                setupapi.SetupDiEnumDeviceInfo.restype = wintypes.BOOL
+                setupapi.SetupDiEnumDeviceInfo.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+                setupapi.SetupDiGetDeviceRegistryPropertyW.restype = wintypes.BOOL
+                setupapi.SetupDiGetDeviceRegistryPropertyW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+                setupapi.SetupDiDestroyDeviceInfoList.restype = wintypes.BOOL
+                setupapi.SetupDiDestroyDeviceInfoList.argtypes = [ctypes.c_void_p]
+
+                class GUID(ctypes.Structure):
+                    _fields_ = [
+                        ('Data1', wintypes.DWORD),
+                        ('Data2', wintypes.WORD),
+                        ('Data3', wintypes.WORD),
+                        ('Data4', wintypes.BYTE * 8),
+                    ]
+
+                class SP_DEVINFO_DATA(ctypes.Structure):
+                    _fields_ = [
+                        ('cbSize', wintypes.DWORD),
+                        ('ClassGuid', GUID),
+                        ('DevInst', wintypes.DWORD),
+                        ('Reserved', ctypes.c_void_p),
+                    ]
+
+                # GUID {4d36e968-e325-11ce-bfc1-08002be10318} = Display Adapters class
+                guid = GUID(0x4d36e968, 0xe325, 0x11ce,
+                            (wintypes.BYTE * 8)(0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18))
+
+                DIGCF_PRESENT = 0x00000002
+                SPDRP_DEVICEDESC = 0x00000000
+
+                dev_info = setupapi.SetupDiGetClassDevsW(
+                    ctypes.byref(guid), None, None, DIGCF_PRESENT
                 )
-                lines = result.stdout.strip().split("\n")[1:]
+                if not dev_info or dev_info == ctypes.c_void_p(-1).value:
+                    raise ctypes.WinError()
+
+                wmi_names = []
+                try:
+                    for i in range(256):
+                        did = SP_DEVINFO_DATA()
+                        did.cbSize = ctypes.sizeof(SP_DEVINFO_DATA)
+                        if not setupapi.SetupDiEnumDeviceInfo(dev_info, i, ctypes.byref(did)):
+                            break
+                        buf = ctypes.create_unicode_buffer(512)
+                        if setupapi.SetupDiGetDeviceRegistryPropertyW(
+                            dev_info, ctypes.byref(did), SPDRP_DEVICEDESC,
+                            None, buf, ctypes.sizeof(buf), None
+                        ):
+                            wmi_names.append(buf.value)
+                finally:
+                    setupapi.SetupDiDestroyDeviceInfoList(dev_info)
+
                 used = set()
-                for line in lines:
-                    wmi_name = line.strip()
-                    if not wmi_name:
-                        continue
+                for wmi_name in wmi_names:
                     if wmi_name in nvml_by_name:
                         idx = nvml_by_name[wmi_name]
                         gpus.append({"index": len(gpus), "name": wmi_name, "nvml_idx": idx})
